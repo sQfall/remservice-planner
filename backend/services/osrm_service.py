@@ -44,6 +44,11 @@ class OSRMService:
     def _make_key(self, from_coords: tuple, to_coords: tuple) -> str:
         lon1, lat1 = from_coords
         lon2, lat2 = to_coords
+        # Валидация координат
+        if not (-90 <= lat1 <= 90) or not (-180 <= lon1 <= 180):
+            raise ValueError(f"Invalid from_coords: {from_coords}")
+        if not (-90 <= lat2 <= 90) or not (-180 <= lon2 <= 180):
+            raise ValueError(f"Invalid to_coords: {to_coords}")
         return f"{lon1:.5f},{lat1:.5f};{lon2:.5f},{lat2:.5f}"
 
     async def _request_osrm(self, coords_str: str) -> dict | None:

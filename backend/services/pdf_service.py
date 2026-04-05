@@ -24,21 +24,32 @@ TITLE_SIZE = 16
 HEADER_SIZE = 12
 
 
-def _register_font():
+_REGISTERED_FONT: str | None = None
+
+
+def _register_font() -> str:
     """Зарегистрировать кириллический шрифт DejaVu."""
+    global _REGISTERED_FONT
+    if _REGISTERED_FONT is not None:
+        return _REGISTERED_FONT
+
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans.ttf",
         os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans.ttf"),
+        # Windows
+        r"C:\Windows\Fonts\DejaVuSans.ttf",
     ]
 
     for path in font_paths:
         if os.path.exists(path):
             pdfmetrics.registerFont(TTFont(FONT_NAME, path))
-            return FONT_NAME
+            _REGISTERED_FONT = FONT_NAME
+            return _REGISTERED_FONT
 
     # Fallback на Helvetica (без кириллицы)
-    return "Helvetica"
+    _REGISTERED_FONT = "Helvetica"
+    return _REGISTERED_FONT
 
 
 def _format_duration(minutes: int) -> str:

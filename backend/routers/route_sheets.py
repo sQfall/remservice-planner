@@ -181,13 +181,15 @@ async def get_route_sheet_pdf(
         vehicle_plate = v.plate
         vehicle_type = v.vehicle_type
 
-    # Подсчитать totals
+    # Подсчитать totals одним запросом (N+1 fix)
     total_distance = 0.0
     total_duration = 0
-    for rp in route_points:
+    if route_points:
+        route_point_ids = [rp.id for rp in route_points]
         seg_result = await db.execute(
             select(RouteSegment).where(
-                (RouteSegment.from_point_id == rp.id) | (RouteSegment.to_point_id == rp.id)
+                (RouteSegment.from_point_id.in_(route_point_ids))
+                | (RouteSegment.to_point_id.in_(route_point_ids))
             )
         )
         for seg in seg_result.scalars().all():

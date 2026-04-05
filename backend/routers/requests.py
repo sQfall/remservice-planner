@@ -70,13 +70,24 @@ async def create_request(
         if coords:
             latitude, longitude = coords
 
+    # Валидация enum-значений
+    try:
+        work_type = WorkType(data.work_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Недопустимый тип работ: {data.work_type}")
+
+    try:
+        priority = Priority(data.priority)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Недопустимый приоритет: {data.priority}")
+
     request = ServiceRequest(
         address=data.address,
         latitude=latitude or 0.0,
         longitude=longitude or 0.0,
-        work_type=WorkType(data.work_type),
+        work_type=work_type,
         description=data.description,
-        priority=Priority(data.priority),
+        priority=priority,
         contact_person=data.contact_person,
         phone=data.phone,
         estimated_duration=data.estimated_duration,
@@ -100,7 +111,12 @@ async def update_request(
     if not request:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-    update_data = data.model_dump(exclude_unset=True)
+    # Whitelist — не позволяем менять status/planned_at/completed_at/created_at через update
+    ALLOWED_FIELDS = {
+        "address", "latitude", "longitude", "work_type", "description",
+        "priority", "contact_person", "phone", "estimated_duration",
+    }
+    update_data = {k: v for k, v in data.model_dump(exclude_unset=True).items() if k in ALLOWED_FIELDS}
     for key, value in update_data.items():
         setattr(request, key, value)
 

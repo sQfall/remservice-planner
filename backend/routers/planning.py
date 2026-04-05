@@ -51,36 +51,7 @@ async def auto_plan(
     return plan
 
 
-@router.get("/{plan_date}")
-async def get_plan(plan_date: date, db: AsyncSession = Depends(get_db)):
-    day_start = datetime.combine(plan_date, datetime.min.time())
-    day_end = datetime.combine(plan_date, datetime.max.time())
-
-    result = await db.execute(
-        select(DailyPlan)
-        .options(
-            selectinload(DailyPlan.route_points)
-            .selectinload(RoutePoint.request),
-        )
-        .where(DailyPlan.plan_date.between(day_start, day_end))
-        .order_by(DailyPlan.created_at.desc())
-        .limit(1)
-    )
-    plan = result.scalar_one_or_none()
-
-    if not plan:
-        raise HTTPException(status_code=404, detail="План на эту дату не найден")
-
-    # Загрузить brigade данные для route_points
-    for rp in plan.route_points:
-        brigade_result = await db.execute(
-            select(Brigade).where(Brigade.id == rp.brigade_id)
-        )
-        rp.brigade_data = brigade_result.scalar_one_or_none()
-
-    return plan
-
-
+# Специфичные маршруты ДО общего {plan_date} — иначе FastAPI захватит их как дату
 @router.get("/{plan_date}/brigades")
 async def get_plan_brigades(plan_date: date, db: AsyncSession = Depends(get_db)):
     day_start = datetime.combine(plan_date, datetime.min.time())
@@ -104,6 +75,40 @@ async def get_plan_brigades(plan_date: date, db: AsyncSession = Depends(get_db))
         brigades = []
 
     return brigades
+
+
+@router.get("/{plan_date}")
+async def get_plan(plan_date: date, db: AsyncSession = Depends(get_db)):
+    """Получить план на дату с route_points и brigade данными."""
+    day_start = datetime.combine(plan_date, datetime.min.time())
+    day_end = datetime.combine(plan_date, datetime.max.time())
+
+    result = await db.execute(
+        select(DailyPlan)
+        .options(
+            selectinload(DailyPlan.route_points)
+            .selectinload(RoutePoint.request),
+        )
+        .where(DailyPlan.plan_date.between(day_start, day_end))
+        .order_by(DailyPlan.created_at.desc())
+        .limit(1)
+    )
+    plan = result.scalar_one_or_none()
+
+    if not plan:
+        raise HTTPException(status_code=404, detail="План на эту дату не найден")
+
+    # Загрузить brigade данные батчем (N+1 fix)
+    brigade_ids = set(rp.brigade_id for rp in plan.route_points)
+    if brigade_ids:
+        brigades_result = await db.execute(
+            select(Brigade).where(Brigade.id.in_(brigade_ids))
+        )
+        brigades_map = {b.id: b for b in brigades_result.scalars().all()}
+        for rp in plan.route_points:
+            rp.brigade_data = brigades_map.get(rp.brigade_id)
+
+    return plan
 
 
 @router.put("/reassign")
@@ -203,15 +208,12 @@ async def reset_plan(
         await db.delete(rp)
 
     # Удалить оставшиеся сегменты (гаражные без from/to point)
+    # Собираем IDs уже удалённых route_points
+    rp_ids = [rp.id for rp in plan.route_points]
     await db.execute(
         RouteSegment.__table__.delete().where(
-            RouteSegment.__table__.c.id.in_(
-                select(RouteSegment.id).join(
-                    DailyPlan,
-                    RouteSegment.plan_id == DailyPlan.id,  # type: ignore
-                    isouter=True,
-                ).where(DailyPlan.id == plan.id)
-            )
+            (RouteSegment.from_point_id.in_(rp_ids) if rp_ids else False)
+            | (RouteSegment.to_point_id.in_(rp_ids) if rp_ids else False)
         )
     )
 
@@ -233,6 +235,15 @@ async def get_statistics(plan_date: date, db: AsyncSession = Depends(get_db)):
 
     if not plan:
         raise HTTPException(status_code=404, detail="План не найден")
+
+    # Загрузить все бригады одним запросом (N+1 fix)
+    brigade_ids = set(rp.brigade_id for rp in plan.route_points)
+    brigades_map: dict[int, Brigade] = {}
+    if brigade_ids:
+        brigades_result = await db.execute(
+            select(Brigade).where(Brigade.id.in_(brigade_ids))
+        )
+        brigades_map = {b.id: b for b in brigades_result.scalars().all()}
 
     # Группировка по бригадам
     brigade_stats: dict[int, dict[str, Any]] = {}
@@ -256,11 +267,8 @@ async def get_statistics(plan_date: date, db: AsyncSession = Depends(get_db)):
             work_min = int((rp.departure_time - rp.arrival_time).total_seconds() / 60)
             brigade_stats[bid]["total_work_time_min"] += work_min
 
-        # Загрузить бригаду для смены
-        brigade_result = await db.execute(
-            select(Brigade).where(Brigade.id == bid)
-        )
-        brigade = brigade_result.scalar_one_or_none()
+        # Проверка овертайма через загруженную бригаду
+        brigade = brigades_map.get(bid)
         if brigade:
             shift_end = datetime.combine(plan_date, brigade.shift_end)
             if rp.departure_time and rp.departure_time > shift_end:
@@ -313,26 +321,28 @@ async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db
     if not plan:
         return {"type": "FeatureCollection", "features": []}
 
-    # Загрузить бригады
+    # Загрузить бригады батчем
     brigade_ids = set(rp.brigade_id for rp in plan.route_points)
     brigades_map: dict[int, Brigade] = {}
-    for bid in brigade_ids:
-        brigade_result = await db.execute(select(Brigade).where(Brigade.id == bid))
-        brigade = brigade_result.scalar_one_or_none()
-        if brigade:
-            brigades_map[bid] = brigade
+    if brigade_ids:
+        brigades_result = await db.execute(
+            select(Brigade).where(Brigade.id.in_(brigade_ids))
+        )
+        brigades_map = {b.id: b for b in brigades_result.scalars().all()}
 
-    # Загрузить сегменты
-    segments_result = await db.execute(
-        select(RouteSegment).where(
-            RouteSegment.id.in_(
-                select(RouteSegment.id).where(
-                    RouteSegment.geometry_json.isnot(None)
-                )
+    # Загрузить сегменты ТОЛЬКО для текущего плана (fix: раньше загружал все сегменты в БД)
+    route_point_ids = [rp.id for rp in plan.route_points]
+    if route_point_ids:
+        segments_result = await db.execute(
+            select(RouteSegment).where(
+                RouteSegment.geometry_json.isnot(None),
+                (RouteSegment.from_point_id.in_(route_point_ids))
+                | (RouteSegment.to_point_id.in_(route_point_ids)),
             )
         )
-    )
-    segments = segments_result.scalars().all()
+        segments = segments_result.scalars().all()
+    else:
+        segments = []
 
     features = []
     for seg in segments:

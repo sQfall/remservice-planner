@@ -68,8 +68,7 @@ async def create_request(
     if latitude is None or longitude is None or (latitude == 0 and longitude == 0):
         coords = await geocode_address(data.address)
         if coords:
-            latitude = coords["latitude"]
-            longitude = coords["longitude"]
+            latitude, longitude = coords
 
     request = ServiceRequest(
         address=data.address,

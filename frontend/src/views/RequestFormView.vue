@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useRequestsStore } from '@/stores/requests'
 
@@ -24,6 +24,12 @@ const form = ref({
 
 const errors = ref({})
 const geocoding = ref(false)
+const mapContainer = ref(null)
+
+let map = null
+let L = null
+let marker = null
+let tileLayer = null
 
 const workTypeOptions = [
   { value: 'electrical', label: 'Электромонтаж' },
@@ -39,6 +45,82 @@ const priorityOptions = [
   { value: 'high', label: 'Высокий' },
   { value: 'emergency', label: 'Аварийный' },
 ]
+
+async function initMap() {
+  L = await import('leaflet')
+  await import('leaflet/dist/leaflet.css')
+
+  const defaultLat = form.value.latitude || 55.75
+  const defaultLng = form.value.longitude || 37.62
+  const zoom = form.value.latitude ? 15 : 10
+
+  map = L.map(mapContainer.value).setView([defaultLat, defaultLng], zoom)
+
+  tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 18,
+  }).addTo(map)
+
+  // Если есть координаты — ставим маркер
+  if (form.value.latitude && form.value.longitude) {
+    setMarker(form.value.latitude, form.value.longitude)
+  }
+
+  // Клик по карте
+  map.on('click', onMapClick)
+
+  // Перерисовка карты после рендера
+  setTimeout(() => map.invalidateSize(), 100)
+}
+
+function onMapClick(e) {
+  const { lat, lng } = e.latlng
+  form.value.latitude = lat
+  form.value.longitude = lng
+  setMarker(lat, lng)
+  reverseGeocode(lat, lng)
+}
+
+function setMarker(lat, lng) {
+  if (marker) {
+    marker.setLatLng([lat, lng])
+  } else {
+    // Фикс иконки маркера Leaflet
+    delete L.Icon.Default.prototype._getIconUrl
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    })
+    marker = L.marker([lat, lng], { draggable: true }).addTo(map)
+    marker.on('dragend', onMarkerDragEnd)
+  }
+}
+
+function onMarkerDragEnd(e) {
+  const { lat, lng } = e.target.getLatLng()
+  form.value.latitude = lat
+  form.value.longitude = lng
+  reverseGeocode(lat, lng)
+}
+
+async function reverseGeocode(lat, lng) {
+  geocoding.value = true
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&countrycodes=ru`,
+      { headers: { 'User-Agent': 'RemServicePlanner/1.0' } }
+    )
+    const data = await response.json()
+    if (data && data.display_name) {
+      form.value.address = data.display_name
+    }
+  } catch (e) {
+    console.error('Ошибка обратного геокодирования:', e)
+  } finally {
+    geocoding.value = false
+  }
+}
 
 onMounted(async () => {
   if (isEdit.value) {
@@ -60,6 +142,15 @@ onMounted(async () => {
     } catch (e) {
       router.push('/')
     }
+  }
+
+  await initMap()
+})
+
+onUnmounted(() => {
+  if (map) {
+    map.remove()
+    map = null
   }
 })
 
@@ -92,6 +183,8 @@ async function geocode() {
     if (data && data.length > 0) {
       form.value.latitude = parseFloat(data[0].lat)
       form.value.longitude = parseFloat(data[0].lon)
+      setMarker(form.value.latitude, form.value.longitude)
+      map.setView([form.value.latitude, form.value.longitude], 15)
     }
   } catch (e) {
     console.error('Ошибка геокодирования:', e)
@@ -164,6 +257,7 @@ function onCancel() {
             v-model="form.address"
             type="text"
             required
+            placeholder="Введите адрес или выберите на карте"
             :class="{ 'input-error': errors.address }"
           />
           <button
@@ -172,22 +266,20 @@ function onCancel() {
             :disabled="geocoding || !form.address.trim()"
             @click="geocode"
           >
-            {{ geocoding ? 'Определяю...' : 'Определить координаты' }}
+            {{ geocoding ? 'Определяю...' : 'Найти' }}
           </button>
         </div>
         <span v-if="errors.address" class="error-text">{{ errors.address }}</span>
       </div>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label for="latitude">Широта</label>
-          <input id="latitude" v-model="form.latitude" type="number" step="any" readonly />
-        </div>
-        <div class="form-group">
-          <label for="longitude">Долгота</label>
-          <input id="longitude" v-model="form.longitude" type="number" step="any" readonly />
-        </div>
+      <div class="form-group">
+        <label>Точка на карте</label>
+        <p class="map-hint">Кликните по карте, чтобы установить координаты и определить адрес</p>
+        <div ref="mapContainer" class="map-container"></div>
       </div>
+
+      <input type="hidden" v-model="form.latitude" />
+      <input type="hidden" v-model="form.longitude" />
 
       <div class="form-group">
         <label for="work_type">Тип работ</label>
@@ -241,6 +333,8 @@ function onCancel() {
 <style scoped>
 .request-form-view {
   max-width: 600px;
+  margin: 0 auto;
+  padding: 0 1rem;
 }
 
 .request-form-view h1 {
@@ -306,6 +400,25 @@ function onCancel() {
 
 .address-row input {
   flex: 1;
+}
+
+.address-row input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
+.map-container {
+  width: 100%;
+  height: 300px;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  z-index: 1;
+}
+
+.map-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.4rem 0;
 }
 
 .error-text {

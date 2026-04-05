@@ -42,7 +42,12 @@ export const usePlanningStore = defineStore('planning', {
         this.plan = await fetchPlan(date)
         this.selectedDate = date
       } catch (e) {
-        this.error = e.message
+        // 404 — это нормально, плана может не существовать
+        if (e.message.includes('404')) {
+          this.plan = null
+        } else {
+          this.error = e.message
+        }
         throw e
       } finally {
         this.loading = false
@@ -55,7 +60,12 @@ export const usePlanningStore = defineStore('planning', {
       try {
         this.statistics = await fetchPlanStatistics(date)
       } catch (e) {
-        this.error = e.message
+        // 404 — это нормально, статистики может не существовать
+        if (e.message.includes('404')) {
+          this.statistics = []
+        } else {
+          this.error = e.message
+        }
         throw e
       } finally {
         this.loading = false

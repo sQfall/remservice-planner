@@ -73,10 +73,6 @@ onMounted(async () => {
 
 <template>
   <div class="planning-view">
-    <div v-if="planningStore.error" class="error-banner">
-      {{ planningStore.error }}
-    </div>
-
     <div class="controls">
       <h1>Планирование</h1>
       <div class="controls-row">
@@ -277,15 +273,6 @@ onMounted(async () => {
 .overtime-warn {
   color: var(--color-danger);
   font-weight: 600;
-}
-
-.error-banner {
-  padding: 0.75rem 1rem;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: var(--radius);
-  color: #991b1b;
-  font-size: 0.9rem;
 }
 
 .empty-state {

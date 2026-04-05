@@ -17,7 +17,7 @@ class ServiceRequestBase(BaseModel):
 
 
 class ServiceRequestCreate(ServiceRequestBase):
-    pass
+    planned_at: datetime | None = None
 
 
 class ServiceRequestUpdate(BaseModel):

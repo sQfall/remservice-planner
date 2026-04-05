@@ -91,6 +91,7 @@ async def create_request(
         contact_person=data.contact_person,
         phone=data.phone,
         estimated_duration=data.estimated_duration,
+        planned_at=data.planned_at,
     )
     db.add(request)
     await db.commit()

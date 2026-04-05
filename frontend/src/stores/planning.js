@@ -65,8 +65,8 @@ export const usePlanningStore = defineStore('planning', {
           this.statistics = []
         } else {
           this.error = e.message
+          throw e
         }
-        throw e
       } finally {
         this.loading = false
       }

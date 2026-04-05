@@ -37,9 +37,10 @@ class OSRMService:
     def __init__(self):
         self._cache: dict = {}
         self._semaphore = asyncio.Semaphore(5)
-        self._delay = 0.2
-        self._max_retries = 3
-        self._base_delay = 1.0
+        self._delay = 0.1
+        self._max_retries = 1
+        self._base_delay = 0.5
+        self._use_osrm = False  # отключить OSRM, использовать haversine
 
     def _make_key(self, from_coords: tuple, to_coords: tuple) -> str:
         lon1, lat1 = from_coords
@@ -58,7 +59,7 @@ class OSRMService:
         for attempt in range(self._max_retries):
             try:
                 async with self._semaphore:
-                    async with httpx.AsyncClient(timeout=10) as client:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
                         response = await client.get(url, params=params)
                         response.raise_for_status()
 
@@ -118,7 +119,10 @@ class OSRMService:
         if key in self._cache:
             return self._cache[key]
 
-        result = await self._request_osrm(key)
+        if self._use_osrm:
+            result = await self._request_osrm(key)
+        else:
+            result = None
 
         if result is None:
             # Fallback на haversine

@@ -10,6 +10,8 @@ const requestsStore = useRequestsStore()
 
 const planDate = ref(new Date().toISOString().slice(0, 10))
 const isPlanning = ref(false)
+const errorMessage = ref(null)
+const successMessage = ref(null)
 
 const specializationLabels = {
   electrical: 'Электромонтаж',
@@ -36,13 +38,28 @@ const totalHours = computed(() => {
   return (totalMin / 60).toFixed(1)
 })
 
+function clearMessages() {
+  errorMessage.value = null
+  successMessage.value = null
+}
+
 async function runPlanning(useOrTools) {
+  clearMessages()
   isPlanning.value = true
   try {
     await planningStore.runPlanning(planDate.value, useOrTools)
     await planningStore.loadStatistics(planDate.value)
+    await requestsStore.loadRequests()
+
+    const count = plannedCount.value
+    if (count > 0) {
+      successMessage.value = `План создан: ${count} заявок распределено по ${planningStore.statistics.length} бригадам`
+    } else {
+      errorMessage.value = 'Нет заявок со статусом "Новая" на выбранную дату'
+    }
   } catch (e) {
-    // ошибка залогирована
+    console.error('Ошибка планирования:', e)
+    errorMessage.value = e.message || 'Не удалось создать план'
   } finally {
     isPlanning.value = false
   }
@@ -50,12 +67,15 @@ async function runPlanning(useOrTools) {
 
 async function onReset() {
   if (!confirm('Удалить план и вернуть заявки в статус "Новая"?')) return
+  clearMessages()
   try {
     await planningStore.resetPlan(planDate.value)
     planningStore.statistics = []
     await requestsStore.loadRequests()
+    successMessage.value = 'План сброшен, заявки возвращены в статус "Новая"'
   } catch (e) {
-    // ошибка залогирована
+    console.error('Ошибка сброса плана:', e)
+    errorMessage.value = e.message || 'Не удалось сбросить план'
   }
 }
 
@@ -73,6 +93,16 @@ onMounted(async () => {
 
 <template>
   <div class="planning-view">
+    <div v-if="errorMessage" class="error-banner">
+      {{ errorMessage }}
+      <button class="error-close" @click="errorMessage = null">✕</button>
+    </div>
+
+    <div v-if="successMessage" class="success-banner">
+      {{ successMessage }}
+      <button class="success-close" @click="successMessage = null">✕</button>
+    </div>
+
     <div class="controls">
       <h1>Планирование</h1>
       <div class="controls-row">
@@ -94,7 +124,8 @@ onMounted(async () => {
     </div>
 
     <div v-if="isPlanning" class="loading-overlay">
-      Планирование выполняется...
+      <div class="loading-spinner"></div>
+      <span>Планирование выполняется...</span>
     </div>
 
     <div class="stats-row">
@@ -194,13 +225,67 @@ onMounted(async () => {
 }
 
 .loading-overlay {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
   padding: 1.5rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   color: var(--color-text-secondary);
   font-size: 0.95rem;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-banner,
+.success-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.error-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.success-banner {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.error-close,
+.success-close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.error-close:hover,
+.success-close:hover {
+  opacity: 1;
 }
 
 .stats-row {

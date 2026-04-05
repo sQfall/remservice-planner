@@ -9,6 +9,7 @@ alembic>=1.13
 
 # Валидация и схемы
 pydantic>=2.0
+pydantic-settings>=2.0
 
 # HTTP-клиент
 httpx>=0.26

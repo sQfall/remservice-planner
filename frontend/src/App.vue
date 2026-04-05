@@ -3,7 +3,7 @@ import AppHeader from '@/components/AppHeader.vue'
 </script>
 
 <template>
-  <div class="app-layout">
+  <div class="app-wrapper">
     <AppHeader />
     <main class="app-main">
       <RouterView />
@@ -55,7 +55,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-.app-layout {
+.app-wrapper {
   min-height: 100vh;
   display: flex;
   flex-direction: column;

@@ -1,0 +1,20 @@
+# FastAPI и сервер
+fastapi>=0.109
+uvicorn[standard]>=0.27
+
+# База данных и миграции
+sqlalchemy>=2.0
+aiosqlite>=0.19
+alembic>=1.13
+
+# Валидация и схемы
+pydantic>=2.0
+
+# HTTP-клиент
+httpx>=0.26
+
+# Генерация PDF
+reportlab>=4.0
+
+# Оптимизация маршрутов (OR-Tools)
+ortools>=9.8

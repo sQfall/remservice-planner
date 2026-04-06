@@ -176,6 +176,7 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
             )
 
         # Disjunctions — штрафы за непокрытые заявки
+        # Высокие penalty чтобы OR-Tools покрывал все заявки если возможно
         for i, req in enumerate(brigade_requests):
             node_index = manager.NodeToIndex(i + 1)
             penalty = PENALTY_BY_PRIORITY.get(req.priority, 100)
@@ -212,10 +213,13 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
         # Убрать депо из начала и конца
         route_requests_indices = route_order[1:-1]  # только точки
 
+        # Предел смены: shift_end + 60 мин overtime
+        shift_limit = datetime.combine(plan_date, brigade.shift_end) + timedelta(minutes=60)
+
         # Создать RoutePoint и RouteSegment
         previous_point_id = None
         previous_req = None  # запоминаем предыдущую заявку
-        current_time = datetime.combine(plan_date, brigade.shift_start)
+        skipped_requests = []  # заявки, которые не влезли в смену
 
         for seq, node_index in enumerate(route_requests_indices, start=1):
             req = brigade_requests[node_index - 1]
@@ -223,6 +227,15 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
             # Время прибытия
             arrival_minutes = solution.Value(time_dimension.CumulVar(manager.NodeToIndex(node_index)))
             arrival_time = datetime.combine(plan_date, brigade.shift_start) + timedelta(minutes=arrival_minutes)
+
+            # Если заявка выходит за лимит смены — пропускаем (останется в new)
+            if arrival_time > shift_limit:
+                skipped_requests.append(req)
+                logger.info(
+                    "OR-Tools: заявка #%d (%s) пропущена — прибытие %s > лимит %s",
+                    req.id, req.address, arrival_time.strftime("%H:%M"), shift_limit.strftime("%H:%M")
+                )
+                continue
 
             est_duration = req.estimated_duration or 60
             departure_time = arrival_time + timedelta(minutes=est_duration)
@@ -307,6 +320,25 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
     # 5. Сохранить
     await db.commit()
     await db.refresh(plan)
+
+    # Лог skipped заявок
+    all_skipped = []
+    for brigade in brigades:
+        req_indices = brigade_requests_map.get(brigade.id, [])
+        if not req_indices:
+            continue
+        brigade_requests_list = [requests[i] for i in req_indices]
+        # Проверяем какие заявки НЕ получили статус planned
+        for req in brigade_requests_list:
+            if req.status == RequestStatus.new:
+                all_skipped.append(req)
+
+    if all_skipped:
+        logger.info(
+            "OR-Tools: %d заявок осталось в 'new' (не влезли в смену): %s",
+            len(all_skipped),
+            ", ".join(f"#{r.id}" for r in all_skipped)
+        )
 
     logger.info(
         "OR-Tools план на %s: %d точек, %d сегментов создано",

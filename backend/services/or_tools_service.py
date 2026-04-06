@@ -127,11 +127,11 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
         # Построить матрицу расстояний (в минутах)
         distance_matrix = await osrm.build_distance_matrix(coords)
 
-        # Время обслуживания на каждой точке (минуты)
+        # Время обслуживания на каждой точке (минуты работы)
         service_times = [0]  # гараж
         for req in brigade_requests:
             est = req.estimated_duration or 60
-            service_times.append(est + 15)  # +15 мин на дорогу/подготовку
+            service_times.append(est)
 
         # Создать OR-Tools модель
         manager = pywrapcp.RoutingIndexManager(num_locations, 1, 0)  # 1 транспорт, депо=0
@@ -187,8 +187,13 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
         search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
         search_parameters.time_limit.seconds = 30
 
-        # Solve
-        solution = routing.SolveWithParameters(search_parameters)
+        # Solve в отдельном потоке чтобы не блокировать asyncio
+        import concurrent.futures
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            solution = await loop.run_in_executor(
+                executor, routing.SolveWithParameters, search_parameters
+            )
 
         if not solution:
             logger.warning("OR-Tools не нашёл решение для бригады %d", brigade.id)
@@ -209,6 +214,7 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
 
         # Создать RoutePoint и RouteSegment
         previous_point_id = None
+        previous_req = None  # запоминаем предыдущую заявку
         current_time = datetime.combine(plan_date, brigade.shift_start)
 
         for seq, node_index in enumerate(route_requests_indices, start=1):
@@ -219,7 +225,7 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
             arrival_time = datetime.combine(plan_date, brigade.shift_start) + timedelta(minutes=arrival_minutes)
 
             est_duration = req.estimated_duration or 60
-            departure_time = arrival_time + timedelta(minutes=est_duration + 15)
+            departure_time = arrival_time + timedelta(minutes=est_duration)
 
             # Проверка смены
             shift_end_dt = datetime.combine(plan_date, brigade.shift_end) + timedelta(minutes=60)
@@ -244,15 +250,11 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
             db.add(route_point)
             await db.flush()
 
-            # RouteSegment от предыдущей точки
-            from_coords = (brigade.garage_longitude, brigade.garage_latitude) if previous_point_id is None else (
-                requests[route_order[route_requests_indices.index(node_index) - 1] - 1].longitude
-                if route_requests_indices.index(node_index) > 0
-                else brigade.garage_longitude,
-                requests[route_order[route_requests_indices.index(node_index) - 1] - 1].latitude
-                if route_requests_indices.index(node_index) > 0
-                else brigade.garage_latitude,
-            )
+            # RouteSegment от предыдущей точки или от гаража
+            if previous_req is None:
+                from_coords = (brigade.garage_longitude, brigade.garage_latitude)
+            else:
+                from_coords = (previous_req.longitude, previous_req.latitude)
             to_coords = (req.longitude, req.latitude)
 
             route_data = await osrm.get_route(from_coords, to_coords)
@@ -275,6 +277,7 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
             req.planned_at = arrival_time
 
             previous_point_id = route_point.id
+            previous_req = req  # запоминаем для следующего сегмента
             total_points_created += 1
             total_segments_created += 1
 

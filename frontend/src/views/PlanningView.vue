@@ -45,6 +45,9 @@ function clearMessages() {
 
 async function loadPlanForDate() {
   clearMessages()
+  // Сбрасываем старые данные чтобы не показывать план от другой даты
+  planningStore.plan = null
+  planningStore.statistics = []
   try {
     await planningStore.loadPlan(planDate.value)
     await planningStore.loadStatistics(planDate.value)

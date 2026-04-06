@@ -111,6 +111,168 @@ async def get_plan_brigades(plan_date: date, db: AsyncSession = Depends(get_db))
     return brigades
 
 
+@router.get("/{plan_date}/routes-geometry")
+async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db)):
+    day_start = datetime.combine(plan_date, datetime.min.time())
+    day_end = datetime.combine(plan_date, datetime.max.time())
+
+    result = await db.execute(
+        select(DailyPlan)
+        .options(selectinload(DailyPlan.route_points))
+        .where(DailyPlan.plan_date.between(day_start, day_end))
+        .limit(1)
+    )
+    plan = result.scalar_one_or_none()
+
+    if not plan:
+        return {"type": "FeatureCollection", "features": []}
+
+    # Загрузить бригады батчем
+    brigade_ids = set(rp.brigade_id for rp in plan.route_points)
+    brigades_map: dict[int, Brigade] = {}
+    if brigade_ids:
+        brigades_result = await db.execute(
+            select(Brigade).where(Brigade.id.in_(brigade_ids))
+        )
+        brigades_map = {b.id: b for b in brigades_result.scalars().all()}
+
+    # Загрузить сегменты ТОЛЬКО для текущего плана
+    route_point_ids = [rp.id for rp in plan.route_points]
+    if route_point_ids:
+        segments_result = await db.execute(
+            select(RouteSegment).where(
+                RouteSegment.geometry_json.isnot(None),
+                (RouteSegment.from_point_id.in_(route_point_ids))
+                | (RouteSegment.to_point_id.in_(route_point_ids)),
+            )
+        )
+        segments = segments_result.scalars().all()
+    else:
+        segments = []
+
+    features = []
+    for seg in segments:
+        bid = None
+        if seg.from_point:
+            bid = seg.from_point.brigade_id
+        elif seg.to_point:
+            bid = seg.to_point.brigade_id
+
+        if not bid or bid not in brigades_map:
+            continue
+
+        brigade = brigades_map[bid]
+        brigade_index = list(brigades_map.keys()).index(bid)
+        color = BRIGADE_COLORS[brigade_index % len(BRIGADE_COLORS)]
+
+        geometry = None
+        try:
+            import json
+            geometry = json.loads(seg.geometry_json) if seg.geometry_json else None
+        except (json.JSONDecodeError, ValueError):
+            geometry = None
+
+        if geometry:
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": geometry,
+                    "properties": {
+                        "brigade_id": bid,
+                        "brigade_name": brigade.name,
+                        "color": color,
+                        "is_garage_segment": seg.is_garage_segment,
+                    },
+                }
+            )
+
+    return {"type": "FeatureCollection", "features": features}
+
+
+@router.get("/{plan_date}/statistics")
+async def get_statistics(plan_date: date, db: AsyncSession = Depends(get_db)):
+    day_start = datetime.combine(plan_date, datetime.min.time())
+    day_end = datetime.combine(plan_date, datetime.max.time())
+
+    result = await db.execute(
+        select(DailyPlan)
+        .options(selectinload(DailyPlan.route_points))
+        .where(DailyPlan.plan_date.between(day_start, day_end))
+    )
+    plan = result.scalar_one_or_none()
+
+    if not plan or not plan.route_points:
+        return []
+
+    # Загрузить все бригады одним запросом (N+1 fix)
+    brigade_ids = set(rp.brigade_id for rp in plan.route_points)
+    brigades_map: dict[int, Brigade] = {}
+    if brigade_ids:
+        brigades_result = await db.execute(
+            select(Brigade).where(Brigade.id.in_(brigade_ids))
+        )
+        brigades_map = {b.id: b for b in brigades_result.scalars().all()}
+
+    # Группировка по бригадам
+    brigade_stats: dict[int, dict[str, Any]] = {}
+
+    for rp in plan.route_points:
+        bid = rp.brigade_id
+        if bid not in brigade_stats:
+            brigade_stats[bid] = {
+                "brigade_id": bid,
+                "total_requests": 0,
+                "total_distance_km": 0.0,
+                "total_travel_time_min": 0,
+                "overtime_minutes": 0,
+                "total_work_time_min": 0,
+            }
+
+        brigade_stats[bid]["total_requests"] += 1
+
+        # Время работы
+        if rp.arrival_time and rp.departure_time:
+            work_min = int((rp.departure_time - rp.arrival_time).total_seconds() / 60)
+            brigade_stats[bid]["total_work_time_min"] += work_min
+
+        # Проверка овертайма через загруженную бригаду
+        brigade = brigades_map.get(bid)
+        if brigade:
+            shift_end = datetime.combine(plan_date, brigade.shift_end)
+            if rp.departure_time and rp.departure_time > shift_end:
+                overtime = int((rp.departure_time - shift_end).total_seconds() / 60)
+                brigade_stats[bid]["overtime_minutes"] = max(
+                    brigade_stats[bid]["overtime_minutes"], overtime
+                )
+
+    # Загрузить сегменты для расстояний и времени перемещения
+    segments_result = await db.execute(
+        select(RouteSegment).join(
+            RoutePoint,
+            (RouteSegment.from_point_id == RoutePoint.id) | (RouteSegment.to_point_id == RoutePoint.id),
+            isouter=True,
+        ).where(RoutePoint.plan_id == plan.id)
+    )
+    segments = segments_result.unique().scalars().all()
+
+    for seg in segments:
+        bid = None
+        if seg.from_point and seg.from_point.brigade_id:
+            bid = seg.from_point.brigade_id
+        elif seg.to_point and seg.to_point.brigade_id:
+            bid = seg.to_point.brigade_id
+
+        if bid and bid in brigade_stats:
+            brigade_stats[bid]["total_distance_km"] += seg.distance / 1000
+            brigade_stats[bid]["total_travel_time_min"] += seg.duration
+
+    # Округлить значения
+    for stats in brigade_stats.values():
+        stats["total_distance_km"] = round(stats["total_distance_km"], 2)
+
+    return list(brigade_stats.values())
+
+
 @router.get("/{plan_date}")
 async def get_plan(plan_date: date, db: AsyncSession = Depends(get_db)):
     """Получить план на дату с route_points и brigade данными."""
@@ -253,90 +415,6 @@ async def reset_plan(
 
     await db.delete(plan)
     await db.commit()
-
-
-@router.get("/{plan_date}/statistics")
-async def get_statistics(plan_date: date, db: AsyncSession = Depends(get_db)):
-    day_start = datetime.combine(plan_date, datetime.min.time())
-    day_end = datetime.combine(plan_date, datetime.max.time())
-
-    result = await db.execute(
-        select(DailyPlan)
-        .options(selectinload(DailyPlan.route_points))
-        .where(DailyPlan.plan_date.between(day_start, day_end))
-    )
-    plan = result.scalar_one_or_none()
-
-    if not plan:
-        return []
-
-    # Загрузить все бригады одним запросом (N+1 fix)
-    brigade_ids = set(rp.brigade_id for rp in plan.route_points)
-    brigades_map: dict[int, Brigade] = {}
-    if brigade_ids:
-        brigades_result = await db.execute(
-            select(Brigade).where(Brigade.id.in_(brigade_ids))
-        )
-        brigades_map = {b.id: b for b in brigades_result.scalars().all()}
-
-    # Группировка по бригадам
-    brigade_stats: dict[int, dict[str, Any]] = {}
-
-    for rp in plan.route_points:
-        bid = rp.brigade_id
-        if bid not in brigade_stats:
-            brigade_stats[bid] = {
-                "brigade_id": bid,
-                "total_requests": 0,
-                "total_distance_km": 0.0,
-                "total_travel_time_min": 0,
-                "overtime_minutes": 0,
-                "total_work_time_min": 0,
-            }
-
-        brigade_stats[bid]["total_requests"] += 1
-
-        # Время работы
-        if rp.arrival_time and rp.departure_time:
-            work_min = int((rp.departure_time - rp.arrival_time).total_seconds() / 60)
-            brigade_stats[bid]["total_work_time_min"] += work_min
-
-        # Проверка овертайма через загруженную бригаду
-        brigade = brigades_map.get(bid)
-        if brigade:
-            shift_end = datetime.combine(plan_date, brigade.shift_end)
-            if rp.departure_time and rp.departure_time > shift_end:
-                overtime = int((rp.departure_time - shift_end).total_seconds() / 60)
-                brigade_stats[bid]["overtime_minutes"] = max(
-                    brigade_stats[bid]["overtime_minutes"], overtime
-                )
-
-    # Загрузить сегменты для расстояний и времени перемещения
-    segments_result = await db.execute(
-        select(RouteSegment).join(
-            RoutePoint,
-            (RouteSegment.from_point_id == RoutePoint.id) | (RouteSegment.to_point_id == RoutePoint.id),
-            isouter=True,
-        ).where(RoutePoint.plan_id == plan.id)
-    )
-    segments = segments_result.unique().scalars().all()
-
-    for seg in segments:
-        bid = None
-        if seg.from_point and seg.from_point.brigade_id:
-            bid = seg.from_point.brigade_id
-        elif seg.to_point and seg.to_point.brigade_id:
-            bid = seg.to_point.brigade_id
-
-        if bid and bid in brigade_stats:
-            brigade_stats[bid]["total_distance_km"] += seg.distance / 1000
-            brigade_stats[bid]["total_travel_time_min"] += seg.duration
-
-    # Округлить значения
-    for stats in brigade_stats.values():
-        stats["total_distance_km"] = round(stats["total_distance_km"], 2)
-
-    return list(brigade_stats.values())
 
 
 @router.get("/{plan_date}/routes-geometry")

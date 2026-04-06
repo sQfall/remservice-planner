@@ -11,13 +11,13 @@ class ServiceRequestBase(BaseModel):
     work_type: str
     description: str | None = None
     priority: str = "medium"
-    contact_person: str | None = None
-    phone: str | None = None
+    contact_person: str
+    phone: str
     estimated_duration: int | None = None
 
 
 class ServiceRequestCreate(ServiceRequestBase):
-    planned_at: datetime | None = None
+    planned_at: datetime
 
 
 class ServiceRequestUpdate(BaseModel):

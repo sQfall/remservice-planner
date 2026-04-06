@@ -155,7 +155,8 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
         )
         time_dimension = routing.GetDimensionOrDie("Time")
 
-        # Time windows — смена + overtime
+        # Time windows — смена + overtime, без жёстких ограничений
+        # Фильтрация по departure_time делается в post-processing
         def _to_minutes(t):
             """Convert time or 'HH:MM:SS' string to minutes from midnight."""
             if isinstance(t, str):
@@ -164,19 +165,19 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
             return t.hour * 60 + t.minute
 
         shift_start_minutes = _to_minutes(brigade.shift_start)
-        shift_end_minutes = _to_minutes(brigade.shift_end) + 60  # +60 min overtime
-        shift_limit = datetime.combine(plan_date, datetime.min.time()) + timedelta(minutes=shift_end_minutes)
+        shift_limit_minutes = _to_minutes(brigade.shift_end) + 60  # +60 min overtime = 1140 (19:00)
 
         depot_index = manager.NodeToIndex(0)
-        time_dimension.CumulVar(depot_index).SetRange(shift_start_minutes, shift_end_minutes)
+        time_dimension.CumulVar(depot_index).SetRange(
+            shift_start_minutes, shift_limit_minutes
+        )
 
+        # Широкие окна — OR-Tools сам оптимизирует порядок
         for i, req in enumerate(brigade_requests):
             node_index = manager.NodeToIndex(i + 1)
-            time_dimension.CumulVar(node_index).SetRange(0, shift_end_minutes)
-            time_dimension.SlackVar(node_index).SetRange(
-                service_times[i + 1],
-                service_times[i + 1] + 600,
-            )
+            time_dimension.CumulVar(node_index).SetRange(0, shift_limit_minutes)
+            est = req.estimated_duration or 60
+            time_dimension.SlackVar(node_index).SetRange(est, est)
 
         # Disjunctions — штрафы за непокрытые заявки
         # Высокие penalty чтобы OR-Tools покрывал все заявки если возможно
@@ -236,11 +237,11 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
 
             # Если departure выходит за лимит смены — пропускаем (останется в new)
             if departure_time > shift_limit:
-                skipped_requests.append(req)
                 logger.info(
-                    "OR-Tools: заявка #%d (%s) пропущена — departure %s > лимит %s",
-                    req.id, req.address, departure_time.strftime("%H:%M"), shift_limit.strftime("%H:%M")
+                    "OR-Tools SKIP: req#%d arrival=%s departure=%s > limit=%s",
+                    req.id, arrival_time.strftime("%H:%M"), departure_time.strftime("%H:%M"), shift_limit.strftime("%H:%M")
                 )
+                skipped_requests.append(req)
                 continue
 
             # RoutePoint

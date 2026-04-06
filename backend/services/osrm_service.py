@@ -37,10 +37,10 @@ class OSRMService:
     def __init__(self):
         self._cache: dict = {}
         self._semaphore = asyncio.Semaphore(5)
-        self._delay = 0.1
-        self._max_retries = 1
-        self._base_delay = 0.5
-        self._use_osrm = False  # отключить OSRM, использовать haversine
+        self._delay = 0.2
+        self._max_retries = 2
+        self._base_delay = 1.0
+        self._use_osrm = True  # использовать OSRM для реальных маршрутов
 
     def _make_key(self, from_coords: tuple, to_coords: tuple) -> str:
         lon1, lat1 = from_coords

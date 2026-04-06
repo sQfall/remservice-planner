@@ -5,18 +5,21 @@ from schemas.brigade import BrigadeShort
 
 
 class ServiceRequestBase(BaseModel):
-    address: str = Field(min_length=1)
+    address: str
     latitude: float
     longitude: float
-    work_type: str = Field(min_length=1)
+    work_type: str
     description: str | None = None
     priority: str = "medium"
-    contact_person: str = Field(min_length=1)
-    phone: str = Field(min_length=1)
+    contact_person: str | None = None
+    phone: str | None = None
     estimated_duration: int | None = None
 
 
 class ServiceRequestCreate(ServiceRequestBase):
+    address: str = Field(min_length=1)
+    contact_person: str = Field(min_length=1)
+    phone: str = Field(min_length=1)
     planned_at: datetime
 
 

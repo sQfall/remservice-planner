@@ -44,9 +44,10 @@ BRIGADE_COLORS = [
 @router.post("/auto")
 async def auto_plan(
     plan_date: date = Query(...),
+    shift_limit: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
-    plan = await planning_service.greedy_planning(plan_date, db)
+    plan = await planning_service.greedy_planning(plan_date, db, shift_limit_enabled=shift_limit)
 
     # Загружаем route_points для сериализации
     result = await db.execute(

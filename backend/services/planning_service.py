@@ -61,8 +61,15 @@ def _is_brigade_compatible(brigade: Brigade, work_type: str) -> bool:
     return brigade.specialization.value == work_type or brigade.specialization.value == "universal"
 
 
-async def greedy_planning(plan_date: date, db: AsyncSession) -> DailyPlan:
-    """Жадный алгоритм планирования маршрутов на день."""
+async def greedy_planning(plan_date: date, db: AsyncSession, shift_limit_enabled: bool = False) -> DailyPlan:
+    """Жадный алгоритм планирования маршрутов на день.
+
+    Args:
+        plan_date: дата планирования
+        db: сессия БД
+        shift_limit_enabled: если True — заявки, не влезающие в смену+60мин,
+            остаются в статусе 'new'. Иначе — все заявки назначаются с овертаймом.
+    """
     osrm = OSRMService()
 
     # 1. Получить все новые заявки на plan_date
@@ -105,6 +112,9 @@ async def greedy_planning(plan_date: date, db: AsyncSession) -> DailyPlan:
         await db.refresh(plan)
         return plan
 
+    # Список всех пропущенных заявок (не влезли в смену)
+    all_skipped: list[ServiceRequest] = []
+
     # 5. Распределить заявки по бригадам
     brigade_assignments: dict[int, list[ServiceRequest]] = {b.id: [] for b in brigades}
     unplanned: list[ServiceRequest] = []
@@ -137,6 +147,8 @@ async def greedy_planning(plan_date: date, db: AsyncSession) -> DailyPlan:
 
         shift_start_dt = datetime.combine(plan_date, brigade.shift_start)
         shift_end_dt = datetime.combine(plan_date, brigade.shift_end)
+        # Лимит смены: конец смены + 60 мин overtime
+        shift_limit_dt = shift_end_dt + timedelta(minutes=60)
 
         current_time = shift_start_dt
         current_coords = garage_coords
@@ -144,7 +156,7 @@ async def greedy_planning(plan_date: date, db: AsyncSession) -> DailyPlan:
         previous_point_id: int | None = None
 
         route_points: list[RoutePoint] = []
-        segments_to_create: list[tuple] = []  # (from_point_id, to_point_id, route_data, is_garage, garage_type)
+        skipped_for_brigade: list[ServiceRequest] = []
 
         # Маршрут: гараж → точка1 → точка2 → ... → гараж
         for i, req in enumerate(ordered_requests):
@@ -158,19 +170,18 @@ async def greedy_planning(plan_date: date, db: AsyncSession) -> DailyPlan:
             duration_min = max(1, int(duration_sec / 60))
 
             arrival_time = current_time + timedelta(minutes=duration_min)
-
-            # Проверка на выход за смену
-            if arrival_time > shift_end_dt:
-                logger.warning(
-                    "Бригада %d: заявка %d выходит за смену (прибытие %s > конец %s)",
-                    brigade.id,
-                    req.id,
-                    arrival_time,
-                    shift_end_dt,
-                )
-
             est_duration = req.estimated_duration or 60  # минуты
             departure_time = arrival_time + timedelta(minutes=est_duration)
+
+            # Если включен лимит смены и заявка не влезает — пропускаем
+            if shift_limit_enabled and departure_time > shift_limit_dt:
+                skipped_for_brigade.append(req)
+                logger.info(
+                    "Бригада %d: заявка %d пропущена (departure %s > лимит %s)",
+                    brigade.id, req.id,
+                    departure_time.strftime("%H:%M"), shift_limit_dt.strftime("%H:%M"),
+                )
+                continue
 
             # Создать RoutePoint
             route_point = RoutePoint(
@@ -186,7 +197,7 @@ async def greedy_planning(plan_date: date, db: AsyncSession) -> DailyPlan:
             await db.flush()
 
             # Создать RouteSegment (от предыдущей точки или от гаража)
-            is_first = i == 0
+            is_first = (previous_point_id is None)
             segment = RouteSegment(
                 from_point_id=previous_point_id,
                 to_point_id=route_point.id,
@@ -240,19 +251,35 @@ async def greedy_planning(plan_date: date, db: AsyncSession) -> DailyPlan:
             )
             db.add(final_segment)
 
+        # Добавить пропущенные заявки бригады в общий список
+        all_skipped.extend(skipped_for_brigade)
+
     # 7. Сохранить план
     plan.status = "draft"
     await db.commit()
     await db.refresh(plan)
 
-    if unplanned:
-        logger.info("Не назначено заявок: %d", len(unplanned))
+    # 8. Если включен лимит смены — перенести пропущенные заявки на следующий день
+    next_day = plan_date + timedelta(days=1)
+    shifted_requests = []
+    if shift_limit_enabled and all_skipped:
+        for req in all_skipped:
+            req.priority = Priority.high
+            req.planned_at = datetime.combine(next_day, datetime.min.time()) + timedelta(hours=8)
+            shifted_requests.append(req)
+            logger.info(
+                "Заявка #%d перенесена на %s с приоритетом high",
+                req.id, next_day
+            )
+        await db.commit()
 
     logger.info(
-        "План на %s создан: %d заявок назначено, %d не назначено",
+        "План на %s создан: %d заявок назначено, %d не назначено, %d перенесено на %s",
         plan_date,
-        len(requests) - len(unplanned),
+        len(requests) - len(unplanned) - len(all_skipped),
         len(unplanned),
+        len(shifted_requests),
+        next_day,
     )
 
     return plan

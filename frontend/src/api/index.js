@@ -48,9 +48,9 @@ export async function fetchBrigades() {
 
 // ─── Планирование ─────────────────────────────────────────
 
-export async function runAutoPlanning(date, useOrTools = false) {
+export async function runAutoPlanning(date, shiftLimit = false) {
   const { data } = await api.post('/planning/auto', null, {
-    params: { plan_date: date, use_or_tools: useOrTools },
+    params: { plan_date: date, shift_limit: shiftLimit },
     timeout: 300000, // 5 минут — планирование может занять много времени
   })
   return data

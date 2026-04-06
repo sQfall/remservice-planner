@@ -21,11 +21,11 @@ export const usePlanningStore = defineStore('planning', {
   }),
 
   actions: {
-    async runPlanning(date, useOrTools = false) {
+    async runPlanning(date, shiftLimit = false) {
       this.loading = true
       this.error = null
       try {
-        this.plan = await runAutoPlanning(date, useOrTools)
+        this.plan = await runAutoPlanning(date, shiftLimit)
         this.selectedDate = date
       } catch (e) {
         this.error = e.message

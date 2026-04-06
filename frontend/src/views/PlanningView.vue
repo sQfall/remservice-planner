@@ -12,6 +12,8 @@ const planDate = ref(new Date().toISOString().slice(0, 10))
 const isPlanning = ref(false)
 const errorMessage = ref(null)
 const successMessage = ref(null)
+const shiftLimit = ref(false)
+const shiftedRequests = ref([]) // заявки, перенесённые на следующий день
 
 const specializationLabels = {
   electrical: 'Электромонтаж',
@@ -62,15 +64,29 @@ watch(planDate, () => {
 
 async function runPlanning() {
   clearMessages()
+  shiftedRequests.value = []
   isPlanning.value = true
   try {
-    await planningStore.runPlanning(planDate.value, false)
+    await planningStore.runPlanning(planDate.value, shiftLimit.value)
     await planningStore.loadStatistics(planDate.value)
     await requestsStore.loadRequests()
 
     const count = plannedCount.value
     if (count > 0) {
       successMessage.value = `План создан: ${count} заявок распределено по ${planningStore.statistics.length} бригадам`
+
+      // Проверить есть ли заявки, перенесённые на следующий день
+      if (shiftLimit.value) {
+        const nextDay = new Date(planDate.value)
+        nextDay.setDate(nextDay.getDate() + 1)
+        const nextDayStr = nextDay.toISOString().slice(0, 10)
+        const shifted = requestsStore.items.filter(
+          (r) => r.planned_at && r.planned_at.startsWith(nextDayStr) && r.priority === 'high'
+        )
+        if (shifted.length > 0) {
+          shiftedRequests.value = shifted
+        }
+      }
     } else {
       errorMessage.value = 'Нет заявок со статусом "Новая" на выбранную дату'
     }
@@ -113,6 +129,16 @@ onMounted(async () => {
       <button class="error-close" @click="errorMessage = null">✕</button>
     </div>
 
+    <div v-if="shiftedRequests.length" class="shifted-banner">
+      <div class="shifted-content">
+        <span class="shifted-title">
+          {{ shiftedRequests.length }} заявок перенесено на завтра ({{ formatDate(planDate) }})
+        </span>
+        <span class="shifted-subtitle">Приоритет изменён на «Высокий»</span>
+      </div>
+      <button class="shifted-close" @click="shiftedRequests = []">✕</button>
+    </div>
+
     <div v-if="successMessage" class="success-banner">
       {{ successMessage }}
       <button class="success-close" @click="successMessage = null">✕</button>
@@ -129,6 +155,10 @@ onMounted(async () => {
           Сбросить
         </button>
       </div>
+      <label class="shift-limit-checkbox">
+        <input type="checkbox" v-model="shiftLimit" />
+        <span>С учётом смены — заявки, не влезающие в смену (+60 мин), переносятся на следующий день с приоритетом «Высокий»</span>
+      </label>
     </div>
 
     <div v-if="isPlanning" class="loading-overlay">
@@ -233,6 +263,62 @@ onMounted(async () => {
   font-size: 0.85rem;
   color: var(--color-text-secondary);
   margin-top: 0.4rem;
+}
+
+.shift-limit-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.shift-limit-checkbox input[type="checkbox"] {
+  margin-top: 0.15rem;
+  cursor: pointer;
+}
+
+.shifted-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: var(--radius);
+  color: #92400e;
+  font-size: 0.9rem;
+}
+
+.shifted-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.shifted-title {
+  font-weight: 600;
+}
+
+.shifted-subtitle {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.shifted-close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.shifted-close:hover {
+  opacity: 1;
 }
 
 .loading-overlay {

@@ -81,7 +81,6 @@ async def auto_plan(
     except Exception as e:
         tb = traceback.format_exc()
         logger.error("Ошибка при планировании:\n%s", tb)
-        print(f"PLANNING ERROR:\n{tb}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

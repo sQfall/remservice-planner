@@ -198,6 +198,8 @@ async def get_statistics(plan_date: date, db: AsyncSession = Depends(get_db)):
         select(DailyPlan)
         .options(selectinload(DailyPlan.route_points))
         .where(DailyPlan.plan_date.between(day_start, day_end))
+        .order_by(DailyPlan.created_at.desc())
+        .limit(1)
     )
     plan = result.scalar_one_or_none()
 
@@ -377,6 +379,8 @@ async def reset_plan(
         select(DailyPlan)
         .options(selectinload(DailyPlan.route_points))
         .where(DailyPlan.plan_date.between(day_start, day_end))
+        .order_by(DailyPlan.created_at.desc())
+        .limit(1)
     )
     plan = result.scalar_one_or_none()
     if not plan:
@@ -399,7 +403,7 @@ async def reset_plan(
         request_obj = req.scalar_one_or_none()
         if request_obj:
             request_obj.status = RequestStatus.new
-            request_obj.planned_at = None
+            # НЕ сбрасываем planned_at — это желаемая дата выполнения
 
         await db.delete(rp)
 

@@ -32,6 +32,21 @@ const priorityLabels = {
 const priorityClass = (priority) => `badge-priority badge-priority-${priority}`
 const statusClass = (status) => `badge-status badge-status-${status}`
 
+const availableDates = computed(() => {
+  const dates = new Set()
+  store.items.forEach((r) => {
+    if (r.planned_at) {
+      dates.add(r.planned_at.slice(0, 10))
+    }
+  })
+  return Array.from(dates).sort().reverse()
+})
+
+function formatDate(dateStr) {
+  const [y, m, d] = dateStr.split('-')
+  return `${d}.${m}.${y}`
+}
+
 function onFilterChange() {
   store.loadRequests()
 }
@@ -64,6 +79,7 @@ async function onDelete(id) {
     <div class="filters">
       <select v-model="store.filters.date" @change="onFilterChange">
         <option :value="null">Все даты</option>
+        <option v-for="d in availableDates" :key="d" :value="d">{{ formatDate(d) }}</option>
       </select>
       <select v-model="store.filters.status" @change="onFilterChange">
         <option :value="null">Все статусы</option>

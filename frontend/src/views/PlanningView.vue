@@ -60,11 +60,11 @@ watch(planDate, () => {
   loadPlanForDate()
 })
 
-async function runPlanning(useOrTools) {
+async function runPlanning() {
   clearMessages()
   isPlanning.value = true
   try {
-    await planningStore.runPlanning(planDate.value, useOrTools)
+    await planningStore.runPlanning(planDate.value, false)
     await planningStore.loadStatistics(planDate.value)
     await requestsStore.loadRequests()
 
@@ -122,20 +122,13 @@ onMounted(async () => {
       <h1>Планирование</h1>
       <div class="controls-row">
         <input v-model="planDate" type="date" class="date-input" />
-        <button class="btn-primary" :disabled="isPlanning" @click="runPlanning(false)">
-          Быстрый план
-        </button>
-        <button class="btn-secondary" :disabled="isPlanning" @click="runPlanning(true)">
-          Оптимальный план
+        <button class="btn-primary" :disabled="isPlanning" @click="runPlanning">
+          Автопланирование
         </button>
         <button class="btn-danger" :disabled="isPlanning" @click="onReset">
           Сбросить
         </button>
       </div>
-      <p class="controls-hint">
-        Быстрый - жадный алгоритм без учёта смены.
-        Оптимальный - OR-Tools с учётом смены (+60 мин).
-      </p>
     </div>
 
     <div v-if="isPlanning" class="loading-overlay">

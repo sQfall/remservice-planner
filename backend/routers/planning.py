@@ -1,6 +1,5 @@
 from datetime import date, datetime
 from typing import Any
-import traceback
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,7 +19,7 @@ from models import (
     GarageSegmentType,
 )
 from schemas import DailyPlanResponse, RoutePointResponse
-from services import planning_service, or_tools_service
+from services import planning_service
 
 logger = logging.getLogger(__name__)
 
@@ -45,43 +44,34 @@ BRIGADE_COLORS = [
 @router.post("/auto")
 async def auto_plan(
     plan_date: date = Query(...),
-    use_or_tools: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
-    try:
-        if use_or_tools:
-            plan = await or_tools_service.ortools_planning(plan_date, db)
-        else:
-            plan = await planning_service.greedy_planning(plan_date, db)
+    plan = await planning_service.greedy_planning(plan_date, db)
 
-        # Загружаем route_points для сериализации
-        result = await db.execute(
-            select(DailyPlan)
-            .options(selectinload(DailyPlan.route_points))
-            .where(DailyPlan.id == plan.id)
-        )
-        plan = result.scalar_one()
+    # Загружаем route_points для сериализации
+    result = await db.execute(
+        select(DailyPlan)
+        .options(selectinload(DailyPlan.route_points))
+        .where(DailyPlan.id == plan.id)
+    )
+    plan = result.scalar_one()
 
-        return {
-            "id": plan.id,
-            "plan_date": plan.plan_date.isoformat(),
-            "status": plan.status.value if hasattr(plan.status, 'value') else str(plan.status),
-            "route_points": [
-                {
-                    "id": rp.id,
-                    "request_id": rp.request_id,
-                    "brigade_id": rp.brigade_id,
-                    "sequence": rp.sequence,
-                    "arrival_time": rp.arrival_time.isoformat() if rp.arrival_time else None,
-                    "departure_time": rp.departure_time.isoformat() if rp.departure_time else None,
-                }
-                for rp in plan.route_points
-            ],
-        }
-    except Exception as e:
-        tb = traceback.format_exc()
-        logger.error("Ошибка при планировании:\n%s", tb)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "id": plan.id,
+        "plan_date": plan.plan_date.isoformat(),
+        "status": plan.status.value if hasattr(plan.status, 'value') else str(plan.status),
+        "route_points": [
+            {
+                "id": rp.id,
+                "request_id": rp.request_id,
+                "brigade_id": rp.brigade_id,
+                "sequence": rp.sequence,
+                "arrival_time": rp.arrival_time.isoformat() if rp.arrival_time else None,
+                "departure_time": rp.departure_time.isoformat() if rp.departure_time else None,
+            }
+            for rp in plan.route_points
+        ],
+    }
 
 
 # Специфичные маршруты ДО общего {plan_date} — иначе FastAPI захватит их как дату

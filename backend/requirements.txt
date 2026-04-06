@@ -16,6 +16,3 @@ httpx>=0.26
 
 # Генерация PDF
 reportlab>=4.0
-
-# Оптимизация маршрутов (OR-Tools)
-ortools>=9.8

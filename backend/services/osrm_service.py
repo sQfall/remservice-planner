@@ -40,7 +40,7 @@ class OSRMService:
         self._delay = 0.2
         self._max_retries = 2
         self._base_delay = 1.0
-        self._use_osrm = False  # haversine — мгновенно, OSRM ненадёжен
+        self._use_osrm = True  # реальные маршруты по дорогам через OSRM
 
     def _make_key(self, from_coords: tuple, to_coords: tuple) -> str:
         lon1, lat1 = from_coords

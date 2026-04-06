@@ -21,14 +21,13 @@ from services.osrm_service import OSRMService
 logger = logging.getLogger(__name__)
 
 PENALTY_BY_PRIORITY = {
-    Priority.emergency: 100000,
-    Priority.high: 1000,
-    Priority.medium: 100,
-    Priority.low: 10,
+    Priority.emergency: 10000000,
+    Priority.high: 1000000,
+    Priority.medium: 100000,
+    Priority.low: 10000,
 }
 
 TIME_PER_DEMAND_UNIT = 60  # 1 минута = 60 единиц времени
-MAX_ROUTE_DURATION = 3600  # макс длительность маршрута в минутах
 
 
 async def ortools_planning(plan_date: date, db: AsyncSession) -> DailyPlan:
@@ -146,33 +145,37 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
         transit_callback_index = routing.RegisterTransitCallback(transit_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-        # Time dimension
+        # Time dimension — разрешаем до конца смены + overtime
         routing.AddDimension(
             transit_callback_index,
-            MAX_ROUTE_DURATION,  # max overtime
-            MAX_ROUTE_DURATION,    # max route time per vehicle
-            False,                  # start cumul to zero
+            600,  # max overtime (10 часов буфер для гибкости)
+            600,    # max route time
+            False,
             "Time",
         )
         time_dimension = routing.GetDimensionOrDie("Time")
 
-        # Time windows
-        shift_start_minutes = brigade.shift_start.hour * 60 + brigade.shift_start.minute
-        shift_end_minutes = brigade.shift_end.hour * 60 + brigade.shift_end.minute + 60  # +60 min overtime
+        # Time windows — смена + overtime
+        def _to_minutes(t):
+            """Convert time or 'HH:MM:SS' string to minutes from midnight."""
+            if isinstance(t, str):
+                h, m, s = t.split(':')
+                return int(h) * 60 + int(m)
+            return t.hour * 60 + t.minute
 
-        # Депо (гараж)
+        shift_start_minutes = _to_minutes(brigade.shift_start)
+        shift_end_minutes = _to_minutes(brigade.shift_end) + 60  # +60 min overtime
+        shift_limit = datetime.combine(plan_date, datetime.min.time()) + timedelta(minutes=shift_end_minutes)
+
         depot_index = manager.NodeToIndex(0)
         time_dimension.CumulVar(depot_index).SetRange(shift_start_minutes, shift_end_minutes)
 
-        # Каждая точка
         for i, req in enumerate(brigade_requests):
             node_index = manager.NodeToIndex(i + 1)
-            # Широкий window — ограничиваем общей сменой
             time_dimension.CumulVar(node_index).SetRange(0, shift_end_minutes)
-            # Service time
             time_dimension.SlackVar(node_index).SetRange(
                 service_times[i + 1],
-                service_times[i + 1] + MAX_ROUTE_DURATION,
+                service_times[i + 1] + 600,
             )
 
         # Disjunctions — штрафы за непокрытые заявки
@@ -224,32 +227,21 @@ async def _ortools_core(plan_date: date, db: AsyncSession) -> DailyPlan:
         for seq, node_index in enumerate(route_requests_indices, start=1):
             req = brigade_requests[node_index - 1]
 
-            # Время прибытия
+            # Время прибытия (arrival_minutes — минуты от полуночи)
             arrival_minutes = solution.Value(time_dimension.CumulVar(manager.NodeToIndex(node_index)))
-            arrival_time = datetime.combine(plan_date, brigade.shift_start) + timedelta(minutes=arrival_minutes)
-
-            # Если заявка выходит за лимит смены — пропускаем (останется в new)
-            if arrival_time > shift_limit:
-                skipped_requests.append(req)
-                logger.info(
-                    "OR-Tools: заявка #%d (%s) пропущена — прибытие %s > лимит %s",
-                    req.id, req.address, arrival_time.strftime("%H:%M"), shift_limit.strftime("%H:%M")
-                )
-                continue
+            arrival_time = datetime.combine(plan_date, datetime.min.time()) + timedelta(minutes=arrival_minutes)
 
             est_duration = req.estimated_duration or 60
             departure_time = arrival_time + timedelta(minutes=est_duration)
 
-            # Проверка смены
-            shift_end_dt = datetime.combine(plan_date, brigade.shift_end) + timedelta(minutes=60)
-            if arrival_time > shift_end_dt:
-                logger.warning(
-                    "Бригада %d: заявка %d выходит за смену (прибытие %s > конец %s)",
-                    brigade.id,
-                    req.id,
-                    arrival_time,
-                    shift_end_dt,
+            # Если departure выходит за лимит смены — пропускаем (останется в new)
+            if departure_time > shift_limit:
+                skipped_requests.append(req)
+                logger.info(
+                    "OR-Tools: заявка #%d (%s) пропущена — departure %s > лимит %s",
+                    req.id, req.address, departure_time.strftime("%H:%M"), shift_limit.strftime("%H:%M")
                 )
+                continue
 
             # RoutePoint
             route_point = RoutePoint(

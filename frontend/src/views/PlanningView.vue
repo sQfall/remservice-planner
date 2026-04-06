@@ -164,8 +164,9 @@ onMounted(async () => {
             <th>Специализация</th>
             <th>Заявок</th>
             <th>Время работы</th>
+            <th>Время переездов</th>
             <th>Овертайм</th>
-            <th>Переездов, км</th>
+            <th>Расстояние, км</th>
           </tr>
         </thead>
         <tbody>
@@ -176,6 +177,7 @@ onMounted(async () => {
             </td>
             <td>{{ stat.total_requests }}</td>
             <td>{{ stat.total_work_time_min }} мин</td>
+            <td>{{ stat.total_travel_time_min }} мин</td>
             <td :class="{ 'overtime-warn': stat.overtime_minutes > 0 }">
               {{ stat.overtime_minutes > 0 ? stat.overtime_minutes + ' мин' : '-' }}
             </td>
@@ -183,6 +185,7 @@ onMounted(async () => {
           </tr>
         </tbody>
       </table>
+      <p class="table-note">Время переездов рассчитано по дорогам без учёта пробок</p>
     </div>
 
     <div v-else-if="!isPlanning" class="empty-state">
@@ -373,5 +376,11 @@ onMounted(async () => {
   text-align: center;
   padding: 3rem 1rem;
   color: var(--color-text-secondary);
+}
+
+.table-note {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.5rem;
 }
 </style>

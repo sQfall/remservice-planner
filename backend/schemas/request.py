@@ -1,18 +1,18 @@
 from __future__ import annotations
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from schemas.brigade import BrigadeShort
 
 
 class ServiceRequestBase(BaseModel):
-    address: str
+    address: str = Field(min_length=1)
     latitude: float
     longitude: float
-    work_type: str
+    work_type: str = Field(min_length=1)
     description: str | None = None
     priority: str = "medium"
-    contact_person: str
-    phone: str
+    contact_person: str = Field(min_length=1)
+    phone: str = Field(min_length=1)
     estimated_duration: int | None = None
 
 

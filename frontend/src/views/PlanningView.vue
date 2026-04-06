@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePlanningStore } from '@/stores/planning'
 import { useBrigadesStore } from '@/stores/brigades'
 import { useRequestsStore } from '@/stores/requests'
@@ -43,6 +43,20 @@ function clearMessages() {
   successMessage.value = null
 }
 
+async function loadPlanForDate() {
+  clearMessages()
+  try {
+    await planningStore.loadPlan(planDate.value)
+    await planningStore.loadStatistics(planDate.value)
+  } catch (e) {
+    // план может не существовать
+  }
+}
+
+watch(planDate, () => {
+  loadPlanForDate()
+})
+
 async function runPlanning(useOrTools) {
   clearMessages()
   isPlanning.value = true
@@ -82,12 +96,7 @@ async function onReset() {
 onMounted(async () => {
   await brigadesStore.loadBrigades()
   await requestsStore.loadRequests()
-  try {
-    await planningStore.loadPlan(planDate.value)
-    await planningStore.loadStatistics(planDate.value)
-  } catch (e) {
-    // план может не существовать
-  }
+  await loadPlanForDate()
 })
 </script>
 

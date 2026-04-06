@@ -157,6 +157,7 @@ async def greedy_planning(plan_date: date, db: AsyncSession, shift_limit_enabled
 
         route_points: list[RoutePoint] = []
         skipped_for_brigade: list[ServiceRequest] = []
+        segments_to_create: list[tuple] = []
 
         # Маршрут: гараж → точка1 → точка2 → ... → гараж
         for i, req in enumerate(ordered_requests):

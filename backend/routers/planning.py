@@ -218,7 +218,7 @@ async def reset_plan(
     )
     plan = result.scalar_one_or_none()
     if not plan:
-        raise HTTPException(status_code=404, detail="План не найден")
+        return  # План уже отсутствует — это нормально
 
     # Удалить сегменты для каждого route_point
     for rp in plan.route_points:
@@ -242,14 +242,14 @@ async def reset_plan(
         await db.delete(rp)
 
     # Удалить оставшиеся сегменты (гаражные без from/to point)
-    # Собираем IDs уже удалённых route_points
     rp_ids = [rp.id for rp in plan.route_points]
-    await db.execute(
-        RouteSegment.__table__.delete().where(
-            (RouteSegment.from_point_id.in_(rp_ids) if rp_ids else False)
-            | (RouteSegment.to_point_id.in_(rp_ids) if rp_ids else False)
+    if rp_ids:
+        await db.execute(
+            RouteSegment.__table__.delete().where(
+                RouteSegment.from_point_id.in_(rp_ids)
+                | RouteSegment.to_point_id.in_(rp_ids)
+            )
         )
-    )
 
     await db.delete(plan)
     await db.commit()
@@ -268,7 +268,7 @@ async def get_statistics(plan_date: date, db: AsyncSession = Depends(get_db)):
     plan = result.scalar_one_or_none()
 
     if not plan:
-        raise HTTPException(status_code=404, detail="План не найден")
+        return []
 
     # Загрузить все бригады одним запросом (N+1 fix)
     brigade_ids = set(rp.brigade_id for rp in plan.route_points)

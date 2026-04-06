@@ -67,6 +67,10 @@ async function onDelete(id) {
     // ошибка уже залогирована в interceptor
   }
 }
+
+onMounted(() => {
+  store.loadRequests()
+})
 </script>
 
 <template>

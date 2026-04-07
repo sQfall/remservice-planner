@@ -235,7 +235,7 @@ async def get_route_sheet_pdf(
         iter([pdf_bytes]),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f"inline; filename=route_sheet_{brigade_id}_{plan_date.isoformat()}.pdf",
+            "Content-Disposition": f"attachment; filename=route_sheet_{brigade_id}_{plan_date.isoformat()}.pdf",
         },
     )
 

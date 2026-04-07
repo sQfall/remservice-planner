@@ -23,7 +23,9 @@ const specializationLabels = {
 }
 
 const newRequestsCount = computed(() => {
-  return requestsStore.items.filter((r) => r.status === 'new').length
+  return requestsStore.items.filter(
+    (r) => r.status === 'new' && r.planned_at && r.planned_at.startsWith(planDate.value)
+  ).length
 })
 
 const plannedCount = computed(() => {

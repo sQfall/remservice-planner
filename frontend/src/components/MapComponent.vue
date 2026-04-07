@@ -127,7 +127,10 @@ function drawGeometry(geometry) {
     }
     // Обработка линий (LineString)
     else if (feature.geometry.type === 'LineString') {
-      const isReturnToGarage = props.garage_segment_type === 'last_to_garage'
+      const props = feature.properties || {}
+      // Проверяем тип сегмента (может быть строкой или объектом в зависимости от источника)
+      const garageType = typeof props.garage_segment_type === 'object' ? props.garage_segment_type.value : props.garage_segment_type
+      const isReturnToGarage = garageType === 'last_to_garage'
       const latlngs = feature.geometry.coordinates.map(([lon, lat]) => [lat, lon])
 
       if (isReturnToGarage) {

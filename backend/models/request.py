@@ -28,6 +28,7 @@ class Priority(str, enum.Enum):
 class RequestStatus(str, enum.Enum):
     new = "new"
     planned = "planned"
+    issued = "issued"
     in_progress = "in_progress"
     completed = "completed"
     cancelled = "cancelled"

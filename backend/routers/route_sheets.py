@@ -15,6 +15,7 @@ from models import (
     Brigade,
     Vehicle,
     ServiceRequest,
+    RequestStatus,
 )
 from services.pdf_service import generate_route_sheet_pdf
 
@@ -128,7 +129,10 @@ async def get_route_sheets(plan_date: date, db: AsyncSession = Depends(get_db)):
             brigade_data[bid]["total_distance"] += seg.distance
             brigade_data[bid]["total_duration"] += seg.duration
 
-    return list(brigade_data.values())
+    # Добавляем статус плана в ответ, чтобы фронтенд мог показать "Листы выданы"
+    result_data = list(brigade_data.values())
+    result_data.append({"_plan_status": plan.status.value if hasattr(plan.status, 'value') else str(plan.status)})
+    return result_data
 
 
 @router.get("/{plan_date}/{brigade_id}/pdf")
@@ -241,19 +245,32 @@ async def issue_route_sheets(
     plan_date: date,
     db: AsyncSession = Depends(get_db),
 ):
-    """Статус плана → 'issued'."""
+    """Статус плана → 'active', статусы заявок → 'issued'."""
     day_start = datetime.combine(plan_date, datetime.min.time())
     day_end = datetime.combine(plan_date, datetime.max.time())
 
     result = await db.execute(
-        select(DailyPlan).where(DailyPlan.plan_date.between(day_start, day_end))
+        select(DailyPlan)
+        .options(selectinload(DailyPlan.route_points))
+        .where(DailyPlan.plan_date.between(day_start, day_end))
     )
     plan = result.scalar_one_or_none()
 
     if not plan:
         raise HTTPException(status_code=404, detail="План не найден")
 
+    # Меняем статус плана на active
     plan.status = "active"
+
+    # Меняем статус всех связанных заявок на issued
+    for rp in plan.route_points:
+        req_result = await db.execute(
+            select(ServiceRequest).where(ServiceRequest.id == rp.request_id)
+        )
+        req = req_result.scalar_one_or_none()
+        if req and req.status == RequestStatus.planned:
+            req.status = RequestStatus.issued
+
     await db.commit()
 
     return {"message": "Маршрутные листы выданы", "plan_id": plan.id}

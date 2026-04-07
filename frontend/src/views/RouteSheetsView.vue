@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { usePlanningStore } from '@/stores/planning'
 import { fetchRouteSheets, downloadRoutePdf, issueRouteSheets } from '@/api'
 
@@ -9,6 +9,9 @@ const selectedDate = ref(new Date().toISOString().slice(0, 10))
 const routeSheets = ref([])
 const loading = ref(false)
 const issuing = ref(false)
+const planStatus = ref(null) // Хранит статус плана: 'draft', 'confirmed', 'active'
+
+const isIssued = computed(() => planStatus.value === 'active')
 
 const workTypeLabels = {
   electrical: 'Электромонтаж',
@@ -27,9 +30,15 @@ function formatTime(iso) {
 async function loadSheets() {
   loading.value = true
   try {
-    routeSheets.value = await fetchRouteSheets(selectedDate.value)
+    const data = await fetchRouteSheets(selectedDate.value)
+    // Ищем объект со статусом плана (добавляется бэкендом)
+    const statusObj = data.find(item => item._plan_status)
+    planStatus.value = statusObj ? statusObj._plan_status : null
+    // Убираем служебный объект из списка бригад
+    routeSheets.value = data.filter(item => !item._plan_status)
   } catch (e) {
     routeSheets.value = []
+    planStatus.value = null
   } finally {
     loading.value = false
   }
@@ -72,12 +81,17 @@ onMounted(async () => {
         {{ loading ? 'Загрузка...' : 'Загрузить' }}
       </button>
       <button
+        v-if="!isIssued"
         class="btn-secondary"
         :disabled="issuing || !routeSheets.length"
         @click="onIssue"
       >
         {{ issuing ? 'Выдача...' : 'Выдать листы' }}
       </button>
+    </div>
+
+    <div v-if="isIssued" class="issued-banner">
+      ✓ Маршрутные листы на выбранную дату выданы
     </div>
 
     <div v-if="loading" class="loading-text">Загрузка...</div>
@@ -263,5 +277,18 @@ onMounted(async () => {
   text-align: center;
   padding: 3rem 1rem;
   color: var(--color-text-secondary);
+}
+
+.issued-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  border-radius: var(--radius);
+  color: #065f46;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 </style>

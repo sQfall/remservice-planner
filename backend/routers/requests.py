@@ -112,9 +112,11 @@ async def update_request(
     if not request:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-    # Запрет на редактирование запланированных заявок
+    # Запрет на редактирование запланированных и выданных заявок
     if request.status == RequestStatus.planned:
         raise HTTPException(status_code=403, detail="Нельзя редактировать запланированную заявку")
+    if request.status == RequestStatus.issued:
+        raise HTTPException(status_code=403, detail="Нельзя редактировать заявку с выданным маршрутным листом")
 
     # Whitelist — не позволяем менять status/planned_at/completed_at/created_at через update
     ALLOWED_FIELDS = {
@@ -141,9 +143,11 @@ async def delete_request(request_id: int, db: AsyncSession = Depends(get_db)):
     if not request:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-    # Запрет на удаление запланированных заявок
+    # Запрет на удаление запланированных и выданных заявок
     if request.status == RequestStatus.planned:
         raise HTTPException(status_code=403, detail="Нельзя удалить запланированную заявку")
+    if request.status == RequestStatus.issued:
+        raise HTTPException(status_code=403, detail="Нельзя удалить заявку с выданным маршрутным листом")
 
     if request.route_point:
         rp = request.route_point

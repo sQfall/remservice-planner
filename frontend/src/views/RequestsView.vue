@@ -136,7 +136,7 @@ onMounted(() => {
           <td>{{ req.brigade?.name || '—' }}</td>
           <td class="actions-cell">
             <button class="btn-secondary btn-sm" v-if="req.status !== 'planned'" @click="router.push(`/requests/${req.id}/edit`)">Изм.</button>
-            <button class="btn-danger btn-sm" @click="onDelete(req.id)">Удал.</button>
+            <button class="btn-danger btn-sm" v-if="req.status !== 'planned'" @click="onDelete(req.id)">Удал.</button>
           </td>
         </tr>
       </tbody>

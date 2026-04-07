@@ -141,6 +141,10 @@ async def delete_request(request_id: int, db: AsyncSession = Depends(get_db)):
     if not request:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
+    # Запрет на удаление запланированных заявок
+    if request.status == RequestStatus.planned:
+        raise HTTPException(status_code=403, detail="Нельзя удалить запланированную заявку")
+
     if request.route_point:
         rp = request.route_point
         segments_to_delete = await db.execute(

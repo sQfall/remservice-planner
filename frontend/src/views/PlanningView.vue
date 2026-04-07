@@ -99,21 +99,12 @@ async function runPlanning() {
         const nextDay = new Date(planDate.value)
         nextDay.setDate(nextDay.getDate() + 1)
         const nextDayStr = nextDay.toISOString().slice(0, 10)
-        console.log('Проверка перенесённых заявок:', {
-          shiftLimit: shiftLimit.value,
-          nextDayStr,
-          totalItems: requestsStore.items.length,
-          withPlannedAt: requestsStore.items.filter(r => r.planned_at).length,
-          matchingDate: requestsStore.items.filter(r => r.planned_at && r.planned_at.startsWith(nextDayStr)).length,
-          highPriority: requestsStore.items.filter(r => r.priority === 'high').length,
-        })
         const shifted = requestsStore.items.filter(
           (r) => r.planned_at && r.planned_at.startsWith(nextDayStr) && r.priority === 'high'
         )
-        console.log('Shifted requests found:', shifted.length, shifted.map(r => ({id: r.id, address: r.address, planned_at: r.planned_at, priority: r.priority})))
         if (shifted.length > 0) {
           shiftedRequests.value = shifted
-          showShiftedDetails.value = true // автоматом раскрыть детали
+          showShiftedDetails.value = true
         }
       }
     } else {

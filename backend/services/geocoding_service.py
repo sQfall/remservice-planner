@@ -4,8 +4,30 @@ import httpx
 logger = logging.getLogger(__name__)
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 USER_AGENT = "RemServicePlanner/1.0"
 TIMEOUT = 5
+
+
+async def reverse_geocode(lat: float, lon: float) -> str | None:
+    """Обратное геокодирование координат через Nominatim."""
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "format": "json",
+        "addressdetails": "1",
+    }
+    headers = {"User-Agent": USER_AGENT}
+
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            response = await client.get(NOMINATIM_REVERSE_URL, params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("display_name")
+    except Exception as e:
+        logger.error("Ошибка обратного геокодирования (%s, %s): %s", lat, lon, e)
+        return None
 
 
 async def geocode_address(address: str) -> tuple[float, float] | None:

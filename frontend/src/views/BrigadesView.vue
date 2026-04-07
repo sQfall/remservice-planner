@@ -45,6 +45,7 @@ function formatInitials(name) {
         </div>
 
         <div class="card-body">
+          <div class="info-row">Гараж: {{ brigade.garage_address || 'Координаты не определены' }}</div>
           <div class="info-row">Смена: {{ brigade.shift_start }} - {{ brigade.shift_end }}</div>
           <div v-if="brigade.vehicles?.length" class="info-row">
             Автомобиль: {{ brigade.vehicles[0].plate }} | Тип: {{ brigade.vehicles[0].vehicle_type }}

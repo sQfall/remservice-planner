@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from database import get_db
 from models import Brigade, BrigadeMember, Vehicle
+from services.geocoding_service import reverse_geocode
 
 router = APIRouter(prefix="/api/brigades", tags=["brigades"])
 
@@ -19,6 +20,11 @@ async def get_brigades(db: AsyncSession = Depends(get_db)):
         .order_by(Brigade.name)
     )
     brigades = result.unique().scalars().all()
+    
+    # Добавляем адрес гаража для каждой бригады
+    for brigade in brigades:
+        brigade.garage_address = await reverse_geocode(brigade.garage_latitude, brigade.garage_longitude)
+        
     return brigades
 
 

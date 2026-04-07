@@ -51,6 +51,7 @@ class BrigadeResponse(BrigadeBase):
     id: int
     members: list[BrigadeMemberResponse] = []
     vehicles: list["VehicleShort"] = []
+    garage_address: str | None = None
 
 
 class BrigadeShort(BaseModel):

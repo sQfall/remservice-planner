@@ -248,15 +248,15 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
                 [
                     str(point.get("sequence", "")),
                     time_str,
-                    point.get("address", ""),
-                    point.get("contact_person", ""),
-                    point.get("phone", ""),
+                    Paragraph(point.get("address", ""), ParagraphStyle("Addr", fontName=font_name, fontSize=FONT_SIZE)),
+                    Paragraph(point.get("contact_person", ""), ParagraphStyle("CP", fontName=font_name, fontSize=FONT_SIZE)),
+                    Paragraph(point.get("phone", ""), ParagraphStyle("Ph", fontName=font_name, fontSize=FONT_SIZE)),
                     point.get("work_type", ""),
                     f"{est_duration} мин",
                 ]
             )
 
-        col_widths = [12 * mm, 18 * mm, 55 * mm, 35 * mm, 25 * mm, 25 * mm, 20 * mm]
+        col_widths = [11 * mm, 16 * mm, 49 * mm, 31 * mm, 22 * mm, 22 * mm, 19 * mm]
         route_tbl = _styled_table(route_data, col_widths=col_widths)
         hdr_style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),

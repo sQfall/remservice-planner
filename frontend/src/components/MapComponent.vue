@@ -107,6 +107,7 @@ function drawGeometry(geometry) {
           weight: 2,
           fillOpacity: 1,
           dashArray: '2, 2', // Пунктирная обводка для отличия
+          data: { brigadeId: bid },
         })
         const popupContent = `<b>Гараж</b><br>${props.brigade_name || 'Бригада #' + bid}`
         marker.bindPopup(popupContent)
@@ -118,6 +119,7 @@ function drawGeometry(geometry) {
           color: '#fff',
           weight: 2,
           fillOpacity: 0.9,
+          data: { brigadeId: bid },
         })
         const popupContent = `<b>Заявка</b><br>${props.address || 'ID: ' + props.request_id}<br><span style="color:${color}">●</span> ${props.brigade_name || ''}`
         marker.bindPopup(popupContent)
@@ -154,6 +156,7 @@ function drawGeometry(geometry) {
           weight: 5,
           dashArray: '5, 8',
           opacity: 0.8,
+          data: { brigadeId: bid },
         })
       } else {
         // Сплошная линия (между заявками и от гаража)
@@ -161,6 +164,7 @@ function drawGeometry(geometry) {
           color: color,
           weight: 6,
           opacity: 0.9,
+          data: { brigadeId: bid },
         })
       }
       
@@ -196,12 +200,14 @@ function highlightBrigade(brigadeId) {
       return
     }
 
-    const popup = layer.getPopup?.()
-    const content = popup?.getContent?.() || ''
-    const belongs = content.includes(brigadeId) || layer.options?.color === getBrigadeColor(brigadeId)
+    // Точное сравнение по ID бригады
+    const layerBid = layer.options?.data?.brigadeId
+    const belongs = layerBid === brigadeId
 
     if (layer.setStyle) {
       layer.setStyle({ opacity: belongs ? 0.85 : 0.1 })
+    } else if (layer.setOpacity) {
+      layer.setOpacity(belongs ? 1 : 0.1)
     }
   })
 }

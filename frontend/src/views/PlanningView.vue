@@ -69,6 +69,17 @@ async function runPlanning() {
   try {
     await planningStore.runPlanning(planDate.value, shiftLimit.value)
     await planningStore.loadStatistics(planDate.value)
+  } catch (e) {
+    console.error('Ошибка планирования:', e)
+    errorMessage.value = e.message || 'Не удалось создать план'
+    // План мог быть создан несмотря на таймаут — пробуем загрузить
+    await loadPlanForDate()
+  } finally {
+    isPlanning.value = false
+  }
+
+  // Загружаем заявки отдельно — не блокируем разблокировку кнопок
+  try {
     await requestsStore.loadRequests()
 
     const count = plannedCount.value
@@ -91,13 +102,7 @@ async function runPlanning() {
       errorMessage.value = 'Нет заявок со статусом "Новая" на выбранную дату'
     }
   } catch (e) {
-    console.error('Ошибка планирования:', e)
-    errorMessage.value = e.message || 'Не удалось создать план'
-    // План мог быть создан несмотря на таймаут — пробуем загрузить
-    await loadPlanForDate()
-    await requestsStore.loadRequests()
-  } finally {
-    isPlanning.value = false
+    console.error('Ошибка загрузки заявок:', e)
   }
 }
 

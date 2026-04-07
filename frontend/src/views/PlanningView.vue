@@ -48,6 +48,11 @@ function clearMessages() {
   successMessage.value = null
 }
 
+function formatDate(dateStr) {
+  const [y, m, d] = dateStr.split('-')
+  return `${d}.${m}.${y}`
+}
+
 async function loadPlanForDate() {
   clearMessages()
   // Сбрасываем старые данные чтобы не показывать план от другой даты

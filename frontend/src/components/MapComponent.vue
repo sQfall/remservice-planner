@@ -52,37 +52,42 @@ function drawGeometry(geometry) {
   })
 
   const pointSet = new Map() // Для fitBounds
-  const brigadeRoutes = {} // Для хранения последовательности точек { brigadeId: [ "Гараж", "Адрес 1", ... ] }
+  const brigadePoints = {} // { brigadeId: [{lon, lat, label}] }
 
-  // 1. Сначала собираем точки для построения описания маршрутов
+  // 1. Сначала собираем точки (заявки и гаражи), чтобы потом определять подписи для линий
   geometry.features.forEach((feature) => {
     if (feature.geometry.type !== 'Point') return
     const props = feature.properties || {}
     const bid = props.brigade_id
-    const type = props.type
-    
-    if (!brigadeRoutes[bid]) {
-      brigadeRoutes[bid] = { points: [], name: props.brigade_name || `Бригада #${bid}` }
+    const [lon, lat] = feature.geometry.coordinates
+
+    if (!brigadePoints[bid]) brigadePoints[bid] = []
+
+    let label = ''
+    if (props.type === 'garage') {
+      label = `Гараж (${props.brigade_name || 'Бригада #' + bid})`
+    } else if (props.type === 'request') {
+      label = props.address || `Заявка #${props.request_id}`
+    } else {
+      label = `Точка`
     }
-    
-    if (type === 'garage') {
-      brigadeRoutes[bid].points.push('Гараж')
-    } else if (type === 'request') {
-      brigadeRoutes[bid].points.push(props.address || `Заявка #${props.request_id}`)
-    }
+
+    brigadePoints[bid].push({ lon, lat, label })
   })
 
-  // Формируем текстовое описание для каждой бригады
-  const routeDescriptions = {}
-  for (const [bid, data] of Object.entries(brigadeRoutes)) {
-    // Гарантируем, что маршрут начинается и заканчивается гаражом, если есть точки
-    if (data.points.length > 0) {
-      if (data.points[0] !== 'Гараж') data.points.unshift('Гараж')
-      if (data.points[data.points.length - 1] !== 'Гараж') data.points.push('Гараж')
-      routeDescriptions[bid] = data.points.join(' → ')
-    } else {
-      routeDescriptions[bid] = `${data.name} (нет точек)`
+  // Вспомогательная функция для поиска ближайшей точки к координатам линии
+  function getNearestLabel(lon, lat, points) {
+    if (!points || points.length === 0) return '?'
+    let minDist = Infinity
+    let label = '?'
+    for (const p of points) {
+      const dist = (p.lon - lon) ** 2 + (p.lat - lat) ** 2
+      if (dist < minDist) {
+        minDist = dist
+        label = p.label
+      }
     }
+    return label
   }
 
   // 2. Рисуем линии
@@ -128,35 +133,45 @@ function drawGeometry(geometry) {
     // Обработка линий (LineString)
     else if (feature.geometry.type === 'LineString') {
       const props = feature.properties || {}
-      // Проверяем тип сегмента безопасно (учитываем, что typeof null === 'object')
-      const rawType = props.garage_segment_type;
-      const garageType = (rawType && typeof rawType === 'object') ? rawType.value : rawType;
+      // Проверяем тип сегмента безопасно
+      const rawType = props.garage_segment_type
+      const garageType = (rawType && typeof rawType === 'object') ? rawType.value : rawType
       const isReturnToGarage = garageType === 'last_to_garage'
+      
       const latlngs = feature.geometry.coordinates.map(([lon, lat]) => [lat, lon])
 
+      // Определяем начальную и конечную точки сегмента для попапа
+      const coords = feature.geometry.coordinates // [lon, lat]
+      const start = coords[0]
+      const end = coords[coords.length - 1]
+      const points = brigadePoints[bid] || []
+      
+      const startLabel = getNearestLabel(start[0], start[1], points)
+      const endLabel = getNearestLabel(end[0], end[1], points)
+      
+      const popupContent = `<b>${props.brigade_name || 'Бригада #' + bid}</b><br>${startLabel} → ${endLabel}`
+
+      let line
       if (isReturnToGarage) {
-        // Пунктир цвета бригады только для сегмента возврата в гараж
-        const line = L.polyline(latlngs, {
+        // Пунктир (возврат в гараж)
+        line = L.polyline(latlngs, {
           color: color,
           weight: 5,
           dashArray: '5, 8',
           opacity: 0.8,
         })
-        line.addTo(layersGroup)
       } else {
-        // Сплошная линия (маршрут между заявками И от гаража к первой заявке)
-        const line = L.polyline(latlngs, {
+        // Сплошная линия (между заявками и от гаража)
+        line = L.polyline(latlngs, {
           color: color,
           weight: 6,
           opacity: 0.9,
         })
-        line.addTo(layersGroup)
-        
-        // Добавляем попап с описанием маршрута
-        if (routeDescriptions[bid]) {
-          line.bindPopup(`<b>${props.brigade_name || ''}</b><br>${routeDescriptions[bid]}`)
-        }
       }
+      
+      // Привязываем попап к обоим типам линий
+      line.bindPopup(popupContent)
+      line.addTo(layersGroup)
 
       // Собираем координаты для fitBounds
       latlngs.forEach(([lat, lon]) => {

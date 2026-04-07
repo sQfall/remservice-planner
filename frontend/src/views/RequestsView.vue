@@ -9,6 +9,7 @@ const store = useRequestsStore()
 const statusLabels = {
   new: 'Новая',
   planned: 'Запланирована',
+  issued: 'В работе',
   in_progress: 'В работе',
   completed: 'Выполнена',
   cancelled: 'Отменена',
@@ -273,6 +274,12 @@ onMounted(() => {
 .badge-status-planned {
   background: #dbeafe;
   color: #1e40af;
+}
+
+.badge-status-issued {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #22c55e;
 }
 
 .badge-status-in_progress {

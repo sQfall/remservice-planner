@@ -88,7 +88,9 @@ onMounted(() => {
       </select>
       <select v-model="store.filters.status" @change="onFilterChange">
         <option :value="null">Все статусы</option>
-        <option v-for="(label, key) in statusLabels" :key="key" :value="key">{{ label }}</option>
+        <option value="new">Новая</option>
+        <option value="planned">Запланирована</option>
+        <option value="issued">В работе</option>
       </select>
       <select v-model="store.filters.work_type" @change="onFilterChange">
         <option :value="null">Все типы</option>

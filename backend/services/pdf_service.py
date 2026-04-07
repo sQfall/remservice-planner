@@ -182,7 +182,6 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
             TableStyle(
                 [
                     ("FONTNAME", (0, 0), (-1, -1), font_name),
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
                     ("TOPPADDING", (0, 0), (-1, -1), 4),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
                 ]
@@ -216,7 +215,6 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
             TableStyle(
                 [
                     ("FONTNAME", (0, 0), (-1, -1), font_name),
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
                     ("TOPPADDING", (0, 0), (-1, -1), 4),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
                 ]
@@ -270,20 +268,7 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
         elements.append(route_tbl)
         elements.append(Spacer(1, 5 * mm))
 
-    # Итого
-    total_distance = brigade_data.get("total_distance", 0)
-    total_duration = brigade_data.get("total_duration", 0)
-    total_requests = len(route_points)
-
-    summary_data = [
-        ["Итого:", ""],
-        ["Количество заявок:", str(total_requests)],
-        ["Общее расстояние:", f"{_format_distance(total_distance)} км"],
-        ["Общее время:", _format_duration(total_duration)],
-    ]
-    summary_tbl = _header_table(summary_data, col_widths=[5 * cm, 12 * cm])
-    elements.append(summary_tbl)
-    elements.append(Spacer(1, 15 * mm))
+    # Итого — УДАЛЕНО по запросу пользователя
 
     # Подпись бригадира
     signature_style = ParagraphStyle(

@@ -98,12 +98,12 @@ function drawGeometry(geometry) {
       const latlngs = feature.geometry.coordinates.map(([lon, lat]) => [lat, lon])
 
       if (isGarage) {
-        // Серый пунктир для гаражных сегментов
+        // Пунктир цвета бригады для сегментов от/до гаража
         const line = L.polyline(latlngs, {
-          color: '#94a3b8',
-          weight: 2,
-          dashArray: '4, 4',
-          opacity: 0.7,
+          color: color,
+          weight: 3,
+          dashArray: '4, 6',
+          opacity: 0.6,
         })
         line.addTo(layersGroup)
       } else {

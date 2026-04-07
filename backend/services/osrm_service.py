@@ -125,13 +125,16 @@ class OSRMService:
             result = None
 
         if result is None:
-            # Fallback на haversine
+            # Fallback на haversine — генерируем простую LineString геометрию
             lon1, lat1 = from_coords
             lon2, lat2 = to_coords
             result = {
                 "duration": _haversine_duration(lat1, lon1, lat2, lon2),
                 "distance": _haversine_distance(lat1, lon1, lat2, lon2),
-                "geometry": None,
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[lon1, lat1], [lon2, lat2]],
+                },
             }
             logger.info(
                 "Fallback haversine для маршрута %s -> %s", from_coords, to_coords

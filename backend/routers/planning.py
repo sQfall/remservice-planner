@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Any
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -130,7 +131,9 @@ async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db
     route_point_ids = [rp.id for rp in plan.route_points]
     if route_point_ids:
         segments_result = await db.execute(
-            select(RouteSegment).where(
+            select(RouteSegment)
+            .options(selectinload(RouteSegment.from_point), selectinload(RouteSegment.to_point))
+            .where(
                 RouteSegment.geometry_json.isnot(None),
                 (RouteSegment.from_point_id.in_(route_point_ids))
                 | (RouteSegment.to_point_id.in_(route_point_ids)),
@@ -409,81 +412,3 @@ async def reset_plan(
 
     await db.delete(plan)
     await db.commit()
-
-
-@router.get("/{plan_date}/routes-geometry")
-async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db)):
-    day_start = datetime.combine(plan_date, datetime.min.time())
-    day_end = datetime.combine(plan_date, datetime.max.time())
-
-    result = await db.execute(
-        select(DailyPlan)
-        .options(selectinload(DailyPlan.route_points))
-        .where(DailyPlan.plan_date.between(day_start, day_end))
-        .limit(1)
-    )
-    plan = result.scalar_one_or_none()
-
-    if not plan:
-        return {"type": "FeatureCollection", "features": []}
-
-    # Загрузить бригады батчем
-    brigade_ids = set(rp.brigade_id for rp in plan.route_points)
-    brigades_map: dict[int, Brigade] = {}
-    if brigade_ids:
-        brigades_result = await db.execute(
-            select(Brigade).where(Brigade.id.in_(brigade_ids))
-        )
-        brigades_map = {b.id: b for b in brigades_result.scalars().all()}
-
-    # Загрузить сегменты ТОЛЬКО для текущего плана (fix: раньше загружал все сегменты в БД)
-    route_point_ids = [rp.id for rp in plan.route_points]
-    if route_point_ids:
-        segments_result = await db.execute(
-            select(RouteSegment).where(
-                RouteSegment.geometry_json.isnot(None),
-                (RouteSegment.from_point_id.in_(route_point_ids))
-                | (RouteSegment.to_point_id.in_(route_point_ids)),
-            )
-        )
-        segments = segments_result.scalars().all()
-    else:
-        segments = []
-
-    features = []
-    for seg in segments:
-        bid = None
-        if seg.from_point:
-            bid = seg.from_point.brigade_id
-        elif seg.to_point:
-            bid = seg.to_point.brigade_id
-
-        if not bid or bid not in brigades_map:
-            continue
-
-        brigade = brigades_map[bid]
-        brigade_index = list(brigades_map.keys()).index(bid)
-        color = BRIGADE_COLORS[brigade_index % len(BRIGADE_COLORS)]
-
-        geometry = None
-        try:
-            import json
-            geometry = json.loads(seg.geometry_json) if seg.geometry_json else None
-        except (json.JSONDecodeError, ValueError):
-            geometry = None
-
-        if geometry:
-            features.append(
-                {
-                    "type": "Feature",
-                    "geometry": geometry,
-                    "properties": {
-                        "brigade_id": bid,
-                        "brigade_name": brigade.name,
-                        "color": color,
-                        "is_garage_segment": seg.is_garage_segment,
-                    },
-                }
-            )
-
-    return {"type": "FeatureCollection", "features": features}

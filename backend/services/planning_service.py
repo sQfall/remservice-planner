@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -206,7 +207,7 @@ async def greedy_planning(plan_date: date, db: AsyncSession, shift_limit_enabled
                 to_point_id=route_point.id,
                 duration=duration_min,
                 distance=route_data["distance"] if route_data else 0,
-                geometry_json=str(route_data["geometry"]) if route_data and route_data.get("geometry") else None,
+                geometry_json=json.dumps(route_data["geometry"]) if route_data and route_data.get("geometry") else None,
                 is_garage_segment=is_first,
                 garage_segment_type=GarageSegmentType.garage_to_first if is_first else None,
             )
@@ -248,7 +249,7 @@ async def greedy_planning(plan_date: date, db: AsyncSession, shift_limit_enabled
                 to_point_id=None,
                 duration=duration_min,
                 distance=route_data["distance"] if route_data else 0,
-                geometry_json=str(route_data["geometry"]) if route_data and route_data.get("geometry") else None,
+                geometry_json=json.dumps(route_data["geometry"]) if route_data and route_data.get("geometry") else None,
                 is_garage_segment=True,
                 garage_segment_type=GarageSegmentType.last_to_garage,
             )

@@ -44,13 +44,8 @@ export const useRequestsStore = defineStore('requests', {
       this.loading = true
       this.error = null
       try {
-        const params = {}
-        if (this.filters.date) params.date = this.filters.date
-        if (this.filters.status) params.status = this.filters.status
-        if (this.filters.work_type) params.work_type = this.filters.work_type
-        if (this.filters.priority) params.priority = this.filters.priority
-
-        this.items = await fetchRequests(params)
+        // Загружаем все заявки без фильтров, фильтрация делается на клиенте в filteredItems
+        this.items = await fetchRequests({})
       } catch (e) {
         this.error = e.message
         throw e

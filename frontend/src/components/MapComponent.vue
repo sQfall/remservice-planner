@@ -52,7 +52,40 @@ function drawGeometry(geometry) {
   })
 
   const pointSet = new Map() // Для fitBounds
+  const brigadeRoutes = {} // Для хранения последовательности точек { brigadeId: [ "Гараж", "Адрес 1", ... ] }
 
+  // 1. Сначала собираем точки для построения описания маршрутов
+  geometry.features.forEach((feature) => {
+    if (feature.geometry.type !== 'Point') return
+    const props = feature.properties || {}
+    const bid = props.brigade_id
+    const type = props.type
+    
+    if (!brigadeRoutes[bid]) {
+      brigadeRoutes[bid] = { points: [], name: props.brigade_name || `Бригада #${bid}` }
+    }
+    
+    if (type === 'garage') {
+      brigadeRoutes[bid].points.push('Гараж')
+    } else if (type === 'request') {
+      brigadeRoutes[bid].points.push(props.address || `Заявка #${props.request_id}`)
+    }
+  })
+
+  // Формируем текстовое описание для каждой бригады
+  const routeDescriptions = {}
+  for (const [bid, data] of Object.entries(brigadeRoutes)) {
+    // Гарантируем, что маршрут начинается и заканчивается гаражом, если есть точки
+    if (data.points.length > 0) {
+      if (data.points[0] !== 'Гараж') data.points.unshift('Гараж')
+      if (data.points[data.points.length - 1] !== 'Гараж') data.points.push('Гараж')
+      routeDescriptions[bid] = data.points.join(' → ')
+    } else {
+      routeDescriptions[bid] = `${data.name} (нет точек)`
+    }
+  }
+
+  // 2. Рисуем линии
   geometry.features.forEach((feature) => {
     const props = feature.properties || {}
     const bid = props.brigade_id
@@ -101,21 +134,23 @@ function drawGeometry(geometry) {
         // Пунктир цвета бригады для сегментов от/до гаража
         const line = L.polyline(latlngs, {
           color: color,
-          weight: 3,
-          dashArray: '4, 6',
-          opacity: 0.6,
+          weight: 5,
+          dashArray: '5, 8',
+          opacity: 0.8,
         })
         line.addTo(layersGroup)
       } else {
         // Цветная сплошная линия для маршрутов
         const line = L.polyline(latlngs, {
           color: color,
-          weight: 3,
-          opacity: 0.85,
+          weight: 6,
+          opacity: 0.9,
         })
         line.addTo(layersGroup)
-        if (props.brigade_name) {
-          line.bindPopup(props.brigade_name)
+        
+        // Добавляем попап с описанием маршрута
+        if (routeDescriptions[bid]) {
+          line.bindPopup(`<b>${props.brigade_name || ''}</b><br>${routeDescriptions[bid]}`)
         }
       }
 

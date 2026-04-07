@@ -53,7 +53,7 @@ watch(
 
 onMounted(async () => {
   await brigadesStore.loadBrigades()
-  await loadGeometry()
+  // Маршруты больше не загружаются автоматически — только по кнопке
 })
 </script>
 

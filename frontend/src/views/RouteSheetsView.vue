@@ -60,7 +60,13 @@ async function downloadPdf(brigadeId) {
   try {
     const blob = await downloadRoutePdf(selectedDate.value, brigadeId)
     const url = URL.createObjectURL(blob)
-    window.open(url, '_blank')
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `route_sheet_${brigadeId}_${selectedDate.value}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   } catch (e) {
     console.error('Ошибка скачивания PDF:', e)
   }

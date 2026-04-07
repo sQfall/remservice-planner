@@ -170,6 +170,11 @@ async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db
             geometry = None
 
         if geometry:
+            # Получаем тип сегмента безопасно
+            seg_type = None
+            if seg.garage_segment_type:
+                seg_type = seg.garage_segment_type.value if hasattr(seg.garage_segment_type, 'value') else str(seg.garage_segment_type)
+
             features.append(
                 {
                     "type": "Feature",
@@ -180,7 +185,7 @@ async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db
                         "brigade_name": brigade.name,
                         "color": color,
                         "is_garage_segment": seg.is_garage_segment,
-                        "garage_segment_type": seg.garage_segment_type.value if seg.garage_segment_type else None,
+                        "garage_segment_type": seg_type,
                     },
                 }
             )

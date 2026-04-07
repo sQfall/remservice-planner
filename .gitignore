@@ -1,11 +1,50 @@
-"backend/node_modules"  
-"frontend/node_modules"  
-"*.db"  
-"frontend/package-lock.json"  
-"backend/__pycache__"  
-"backend/models/__pycache__"  
-"backend/routers/__pycache__"  
-"backend/schemas/__pycache__"  
-"backend/services/__pycache__"  
-"frontend/.vite"  
-"frontend/index.html"  
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Node
+node_modules/
+frontend/.vite/
+frontend/dist/
+
+# Зависимости
+*.egg-info/
+*.egg
+.Pipfile.lock
+
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# База данных (SQLite)
+*.db
+
+# Логи
+*.log
+
+# Qwen Code — персональные настройки
+.qwen/
+qwen/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Тестовые/временные файлы
+*_test*.py
+_test*.py
+_seed*.py
+_check*.py
+_diag*.py
+_reset*.py

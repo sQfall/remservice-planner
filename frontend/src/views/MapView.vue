@@ -15,18 +15,20 @@ const BRIGADE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '
 // Уникальные бригады из geometry
 const legendBrigades = computed(() => {
   const features = planningStore.routesGeometry?.features || []
-  const seen = new Map()
+  const seen = new Set()
   features.forEach((f) => {
     const bid = f.properties?.brigade_id
-    const name = f.properties?.brigade_name || `Бригада #${bid}`
-    if (bid !== undefined && !seen.has(bid)) {
-      seen.set(bid, { id: bid, name })
-    }
+    if (bid !== undefined) seen.add(bid)
   })
-  return [...seen.values()].map((b, i) => ({
-    ...b,
-    color: BRIGADE_COLORS[i % BRIGADE_COLORS.length],
-  }))
+  
+  // Берем имена и цвета из загруженного списка бригад (более надежно)
+  return brigadesStore.items
+    .filter((b) => seen.has(b.id))
+    .map((b, index) => ({
+      id: b.id,
+      name: b.name,
+      color: BRIGADE_COLORS[index % BRIGADE_COLORS.length],
+    }))
 })
 
 // Select options из legendBrigades

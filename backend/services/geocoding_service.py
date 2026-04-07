@@ -1,4 +1,5 @@
 import logging
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -7,6 +8,29 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 USER_AGENT = "RemServicePlanner/1.0"
 TIMEOUT = 5
+
+# Глобальный клиент с пулом соединений
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Получить или создать HTTP-клиент с пулом соединений."""
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(
+            timeout=TIMEOUT,
+            headers={"User-Agent": USER_AGENT},
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
+    return _client
+
+
+async def close_client():
+    """Закрыить HTTP-клиент при завершении работы."""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
 
 
 async def reverse_geocode(lat: float, lon: float) -> str | None:
@@ -17,14 +41,13 @@ async def reverse_geocode(lat: float, lon: float) -> str | None:
         "format": "json",
         "addressdetails": "1",
     }
-    headers = {"User-Agent": USER_AGENT}
 
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            response = await client.get(NOMINATIM_REVERSE_URL, params=params, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("display_name")
+        client = _get_client()
+        response = await client.get(NOMINATIM_REVERSE_URL, params=params)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("display_name")
     except Exception as e:
         logger.error("Ошибка обратного геокодирования (%s, %s): %s", lat, lon, e)
         return None
@@ -38,21 +61,20 @@ async def geocode_address(address: str) -> tuple[float, float] | None:
         "limit": "1",
         "countrycodes": "ru",
     }
-    headers = {"User-Agent": USER_AGENT}
 
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            response = await client.get(NOMINATIM_URL, params=params, headers=headers)
-            response.raise_for_status()
-            data = response.json()
+        client = _get_client()
+        response = await client.get(NOMINATIM_URL, params=params)
+        response.raise_for_status()
+        data = response.json()
 
-            if data and len(data) > 0:
-                lat = float(data[0]["lat"])
-                lon = float(data[0]["lon"])
-                return (lat, lon)
+        if data and len(data) > 0:
+            lat = float(data[0]["lat"])
+            lon = float(data[0]["lon"])
+            return (lat, lon)
 
-            logger.warning("Адрес не найден: %s", address)
-            return None
+        logger.warning("Адрес не найден: %s", address)
+        return None
 
     except httpx.TimeoutException:
         logger.error("Таймаут геокодирования адреса: %s", address)

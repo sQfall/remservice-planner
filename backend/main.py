@@ -6,12 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from database import init_db
 from routers import requests, brigades, planning, route_sheets
+from services import geocoding_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     yield
+    # Закрытие HTTP-клиентов при завершении
+    await geocoding_service.close_client()
 
 
 app = FastAPI(

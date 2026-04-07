@@ -1,14 +1,14 @@
 import asyncio
-import json
 import logging
 import math
 import time
+from functools import lru_cache
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from config import settings
 
-BASE_URL = "https://router.project-osrm.org/route/v1/driving"
+logger = logging.getLogger(__name__)
 
 
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -35,39 +35,74 @@ def _haversine_duration(lat1: float, lon1: float, lat2: float, lon2: float) -> i
 
 class OSRMService:
     def __init__(self):
-        self._cache: dict = {}
-        self._semaphore = asyncio.Semaphore(5)
-        self._delay = 0.2
-        self._max_retries = 2
+        self._semaphore: asyncio.Semaphore | None = None
+        self._last_request_time: float = 0.0
         self._base_delay = 1.0
-        self._use_osrm = True  # реальные маршруты по дорогам через OSRM
 
-    def _make_key(self, from_coords: tuple, to_coords: tuple) -> str:
+        # HTTP-клиент с пулом соединений
+        self._client = httpx.AsyncClient(
+            timeout=settings.OSRM_TIMEOUT,
+            limits=httpx.Limits(
+                max_connections=settings.OSRM_CONCURRENCY,
+                max_keepalive_connections=5,
+            ),
+        )
+
+    def _get_semaphore(self) -> asyncio.Semaphore:
+        """Ленивая инициализация Semaphore для привязки к event loop."""
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(settings.OSRM_CONCURRENCY)
+        return self._semaphore
+
+    @staticmethod
+    def _validate_coords(coords: tuple, name: str) -> None:
+        """Валидировать координаты."""
+        lon, lat = coords
+        if not (-90 <= lat <= 90):
+            raise ValueError(f"Invalid latitude in {name}: {lat}")
+        if not (-180 <= lon <= 180):
+            raise ValueError(f"Invalid longitude in {name}: {lon}")
+
+    @staticmethod
+    def _make_cache_key(from_coords: tuple, to_coords: tuple) -> str:
+        """Ключ кэша — не зависит от формата API."""
         lon1, lat1 = from_coords
         lon2, lat2 = to_coords
-        # Валидация координат
-        if not (-90 <= lat1 <= 90) or not (-180 <= lon1 <= 180):
-            raise ValueError(f"Invalid from_coords: {from_coords}")
-        if not (-90 <= lat2 <= 90) or not (-180 <= lon2 <= 180):
-            raise ValueError(f"Invalid to_coords: {to_coords}")
+        return f"{lon1:.5f}:{lat1:.5f}-{lon2:.5f}:{lat2:.5f}"
+
+    @staticmethod
+    def _make_url_coords(from_coords: tuple, to_coords: tuple) -> str:
+        """Строка координат для OSRM URL."""
+        lon1, lat1 = from_coords
+        lon2, lat2 = to_coords
         return f"{lon1:.5f},{lat1:.5f};{lon2:.5f},{lat2:.5f}"
 
-    async def _request_osrm(self, coords_str: str) -> dict | None:
-        url = f"{BASE_URL}/{coords_str}"
-        params = {"overview": "full", "geometries": "geojson", "steps": "false"}
+    async def _throttle(self):
+        """Минимальный интервал между запросами к OSRM."""
+        now = time.monotonic()
+        elapsed = now - self._last_request_time
+        if elapsed < settings.OSRM_MIN_INTERVAL:
+            await asyncio.sleep(settings.OSRM_MIN_INTERVAL - elapsed)
+        self._last_request_time = time.monotonic()
 
-        for attempt in range(self._max_retries):
+    @lru_cache(maxsize=1000)
+    def _cached_haversine(self, lat1: float, lon1: float, lat2: float, lon2: float) -> int:
+        """Кэширование haversine для повторяющихся координат."""
+        return _haversine_duration(lat1, lon1, lat2, lon2)
+
+    async def _request_osrm(self, url: str, params: dict) -> dict | None:
+        """Запрос к OSRM с retry и exponential backoff."""
+        for attempt in range(settings.OSRM_MAX_RETRIES):
             try:
-                async with self._semaphore:
-                    async with httpx.AsyncClient(timeout=5.0) as client:
-                        response = await client.get(url, params=params)
-                        response.raise_for_status()
+                async with self._get_semaphore():
+                    response = await self._client.get(url, params=params)
+                    response.raise_for_status()
 
                 data = response.json()
 
                 if data.get("code") != "Ok" or not data.get("routes"):
                     logger.warning(
-                        "OSRM вернул некорректный ответ для %s: %s", coords_str, data
+                        "OSRM вернул некорректный ответ для %s: %s", url, data
                     )
                     return None
 
@@ -80,22 +115,22 @@ class OSRMService:
 
             except httpx.TimeoutException:
                 logger.warning(
-                    "Таймаут OSRM (попытка %d/%d): %s", attempt + 1, self._max_retries, coords_str
+                    "Таймаут OSRM (попытка %d/%d): %s", attempt + 1, settings.OSRM_MAX_RETRIES, url
                 )
             except httpx.RequestError as e:
                 logger.warning(
                     "Ошибка запроса OSRM (попытка %d/%d): %s — %s",
                     attempt + 1,
-                    self._max_retries,
-                    coords_str,
+                    settings.OSRM_MAX_RETRIES,
+                    url,
                     e,
                 )
             except (KeyError, ValueError) as e:
                 logger.error(
                     "Ошибка парсинга ответа OSRM (попытка %d/%d): %s — %s",
                     attempt + 1,
-                    self._max_retries,
-                    coords_str,
+                    settings.OSRM_MAX_RETRIES,
+                    url,
                     e,
                 )
                 return None
@@ -114,22 +149,29 @@ class OSRMService:
         to_coords: (longitude, latitude)
         Возвращает dict: duration(сек), distance(метры), geometry_json
         """
-        key = self._make_key(from_coords, to_coords)
+        self._validate_coords(from_coords, "from_coords")
+        self._validate_coords(to_coords, "to_coords")
 
-        if key in self._cache:
-            return self._cache[key]
+        cache_key = self._make_cache_key(from_coords, to_coords)
 
-        if self._use_osrm:
-            result = await self._request_osrm(key)
+        # Используем lru_cache для haversine
+        lon1, lat1 = from_coords
+        lon2, lat2 = to_coords
+        haversine_result = self._cached_haversine(lat1, lon1, lat2, lon2)
+
+        if settings.OSRM_ENABLED:
+            url_coords = self._make_url_coords(from_coords, to_coords)
+            url = f"{settings.OSRM_BASE_URL}/{url_coords}"
+            params = {"overview": "full", "geometries": "geojson", "steps": "false"}
+
+            result = await self._request_osrm(url, params)
         else:
             result = None
 
         if result is None:
             # Fallback на haversine — генерируем простую LineString геометрию
-            lon1, lat1 = from_coords
-            lon2, lat2 = to_coords
             result = {
-                "duration": _haversine_duration(lat1, lon1, lat2, lon2),
+                "duration": haversine_result,
                 "distance": _haversine_distance(lat1, lon1, lat2, lon2),
                 "geometry": {
                     "type": "LineString",
@@ -139,9 +181,9 @@ class OSRMService:
             logger.info(
                 "Fallback haversine для маршрута %s -> %s", from_coords, to_coords
             )
+        else:
+            await self._throttle()
 
-        self._cache[key] = result
-        await asyncio.sleep(self._delay)
         return result
 
     async def build_distance_matrix(
@@ -154,25 +196,42 @@ class OSRMService:
         n = len(points)
         matrix = [[0] * n for _ in range(n)]
 
-        tasks = []
-        for i in range(n):
-            for j in range(n):
-                if i == j:
-                    continue
-                key = self._make_key(points[i], points[j])
-                if key in self._cache:
-                    matrix[i][j] = int(self._cache[key]["duration"])
-                else:
-                    tasks.append((i, j, points[i], points[j]))
+        # Собираем только недостающие пары
+        tasks_meta = [
+            (i, j, points[i], points[j])
+            for i in range(n)
+            for j in range(n)
+            if i != j
+        ]
 
-        # Запросить все недоста маршрутов параллельно
-        for i, j, from_c, to_c in tasks:
-            result = await self.get_route(from_c, to_c)
-            if result:
-                matrix[i][j] = int(result["duration"])
-            else:
+        if not tasks_meta:
+            return matrix
+
+        # Действительно параллельные запросы через asyncio.gather
+        async def _get_route_safe(from_c, to_c):
+            try:
+                return await self.get_route(from_c, to_c)
+            except Exception as e:
+                logger.warning("Ошибка получения маршрута для матрицы: %s", e)
+                return None
+
+        results = await asyncio.gather(
+            *[_get_route_safe(from_c, to_c) for _, _, from_c, to_c in tasks_meta],
+            return_exceptions=True,
+        )
+
+        # Заполняем матрицу из результатов
+        for idx, (i, j, from_c, to_c) in enumerate(tasks_meta):
+            result = results[idx]
+            if isinstance(result, Exception) or result is None:
                 lon1, lat1 = from_c
                 lon2, lat2 = to_c
-                matrix[i][j] = _haversine_duration(lat1, lon1, lat2, lon2)
+                matrix[i][j] = self._cached_haversine(lat1, lon1, lat2, lon2)
+            else:
+                matrix[i][j] = int(result["duration"])
 
         return matrix
+
+    async def close(self):
+        """Закрыить HTTP-клиент при завершении работы."""
+        await self._client.aclose()

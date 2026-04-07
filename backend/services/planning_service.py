@@ -273,7 +273,7 @@ async def greedy_planning(plan_date: date, db: AsyncSession, shift_limit_enabled
     """
     osrm = OSRMService()
 
-    # FIX #4: оборачиваем весь алгоритм в try/except для rollback при ошибке
+    # FIX #4: оборачиваем весь алгоритм в try/except/finally для rollback и закрытия клиента
     try:
         # Этап 1: Загрузка данных
         requests = await _load_pending_requests(plan_date, db)
@@ -331,3 +331,5 @@ async def greedy_planning(plan_date: date, db: AsyncSession, shift_limit_enabled
         await db.rollback()
         logger.error("Ошибка планирования на %s: %s", plan_date, e, exc_info=True)
         raise
+    finally:
+        await osrm.close()

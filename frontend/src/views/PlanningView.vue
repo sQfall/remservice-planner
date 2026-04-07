@@ -14,6 +14,7 @@ const errorMessage = ref(null)
 const successMessage = ref(null)
 const shiftLimit = ref(false)
 const shiftedRequests = ref([]) // заявки, перенесённые на следующий день
+const showShiftedDetails = ref(false)
 
 const specializationLabels = {
   electrical: 'Электромонтаж',
@@ -93,11 +94,21 @@ async function runPlanning() {
         const nextDay = new Date(planDate.value)
         nextDay.setDate(nextDay.getDate() + 1)
         const nextDayStr = nextDay.toISOString().slice(0, 10)
+        console.log('Проверка перенесённых заявок:', {
+          shiftLimit: shiftLimit.value,
+          nextDayStr,
+          totalItems: requestsStore.items.length,
+          withPlannedAt: requestsStore.items.filter(r => r.planned_at).length,
+          matchingDate: requestsStore.items.filter(r => r.planned_at && r.planned_at.startsWith(nextDayStr)).length,
+          highPriority: requestsStore.items.filter(r => r.priority === 'high').length,
+        })
         const shifted = requestsStore.items.filter(
           (r) => r.planned_at && r.planned_at.startsWith(nextDayStr) && r.priority === 'high'
         )
+        console.log('Shifted requests found:', shifted.length, shifted.map(r => ({id: r.id, address: r.address, planned_at: r.planned_at, priority: r.priority})))
         if (shifted.length > 0) {
           shiftedRequests.value = shifted
+          showShiftedDetails.value = true // автоматом раскрыть детали
         }
       }
     } else {
@@ -142,8 +153,18 @@ onMounted(async () => {
           {{ shiftedRequests.length }} заявок перенесено на завтра ({{ formatDate(planDate) }})
         </span>
         <span class="shifted-subtitle">Приоритет изменён на «Высокий»</span>
+        <button class="shifted-details-btn" @click="showShiftedDetails = !showShiftedDetails">
+          {{ showShiftedDetails ? 'Скрыть детали' : 'Показать детали' }}
+        </button>
+        <ul v-if="showShiftedDetails" class="shifted-list">
+          <li v-for="req in shiftedRequests" :key="req.id" class="shifted-item">
+            <span class="shifted-address">{{ req.address }}</span>
+            <span class="shifted-priority">Высокий</span>
+            <span class="shifted-time">{{ req.planned_at ? new Date(req.planned_at).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) : '—' }}</span>
+          </li>
+        </ul>
       </div>
-      <button class="shifted-close" @click="shiftedRequests = []">✕</button>
+      <button class="shifted-close" @click="shiftedRequests = []; showShiftedDetails = false">✕</button>
     </div>
 
     <div v-if="successMessage" class="success-banner">
@@ -225,7 +246,7 @@ onMounted(async () => {
     </div>
 
     <div v-else-if="!isPlanning" class="empty-state">
-      Выберите дату и нажмите "Быстрый план" или "Оптимальный план"
+      Выберите дату и нажмите "Автопланирование"
     </div>
   </div>
 </template>
@@ -312,6 +333,58 @@ onMounted(async () => {
 .shifted-subtitle {
   font-size: 0.8rem;
   opacity: 0.8;
+}
+
+.shifted-details-btn {
+  background: none;
+  border: 1px solid #92400e;
+  border-radius: 4px;
+  color: #92400e;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  margin-top: 0.3rem;
+  align-self: flex-start;
+}
+
+.shifted-details-btn:hover {
+  background: rgba(146, 64, 14, 0.1);
+}
+
+.shifted-list {
+  list-style: none;
+  margin: 0.5rem 0 0 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.shifted-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid rgba(146, 64, 14, 0.2);
+  font-size: 0.85rem;
+}
+
+.shifted-address {
+  flex: 1;
+  font-weight: 500;
+}
+
+.shifted-priority {
+  background: #ffedd5;
+  color: #9a3412;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.shifted-time {
+  color: #92400e;
+  font-size: 0.8rem;
 }
 
 .shifted-close {

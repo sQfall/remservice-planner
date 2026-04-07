@@ -37,7 +37,6 @@ class ServiceRequestUpdate(BaseModel):
     phone: str | None = None
     estimated_duration: int | None = None
     planned_at: datetime | None = None
-    completed_at: datetime | None = None
 
 
 class ServiceRequestResponse(ServiceRequestBase):
@@ -47,5 +46,4 @@ class ServiceRequestResponse(ServiceRequestBase):
     status: str
     created_at: datetime
     planned_at: datetime | None = None
-    completed_at: datetime | None = None
     brigade: BrigadeShort | None = None

@@ -11,8 +11,6 @@ const statusLabels = {
   planned: 'Запланирована',
   issued: 'В работе',
   in_progress: 'В работе',
-  completed: 'Выполнена',
-  cancelled: 'Отменена',
 }
 
 const workTypeLabels = {
@@ -285,16 +283,6 @@ onMounted(() => {
 .badge-status-in_progress {
   background: #fef3c7;
   color: #92400e;
-}
-
-.badge-status-completed {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.badge-status-cancelled {
-  background: #f1f5f9;
-  color: #64748b;
 }
 
 .empty-state {

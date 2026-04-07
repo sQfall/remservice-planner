@@ -30,8 +30,6 @@ class RequestStatus(str, enum.Enum):
     planned = "planned"
     issued = "issued"
     in_progress = "in_progress"
-    completed = "completed"
-    cancelled = "cancelled"
 
 
 class ServiceRequest(Base):
@@ -47,7 +45,6 @@ class ServiceRequest(Base):
     status: Mapped[RequestStatus] = mapped_column(Enum(RequestStatus), nullable=False, default=RequestStatus.new)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     planned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     contact_person: Mapped[str | None] = mapped_column(String(200), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     estimated_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -118,7 +118,7 @@ async def update_request(
     if request.status == RequestStatus.issued:
         raise HTTPException(status_code=403, detail="Нельзя редактировать заявку с выданным маршрутным листом")
 
-    # Whitelist — не позволяем менять status/planned_at/completed_at/created_at через update
+    # Whitelist — не позволяем менять status/planned_at/created_at через update
     ALLOWED_FIELDS = {
         "address", "latitude", "longitude", "work_type", "description",
         "priority", "contact_person", "phone", "estimated_duration",

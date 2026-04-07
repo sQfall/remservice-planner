@@ -88,13 +88,14 @@ function drawGeometry(geometry) {
   geometry.features.forEach((feature) => {
     const props = feature.properties || {}
     const bid = props.brigade_id
-    const color = props.color || getBrigadeColor(bid)
+    // Всегда используем цвет по ID бригады — игнорируем props.color от сервера
+    const color = getBrigadeColor(bid)
 
     // Обработка точек (Point)
     if (feature.geometry.type === 'Point') {
       const [lon, lat] = feature.geometry.coordinates
       const pointType = props.type // 'request' или 'garage'
-      const color = props.color || getBrigadeColor(bid)
+      const color = getBrigadeColor(bid)
       
       let marker
       if (pointType === 'garage') {
@@ -197,7 +198,7 @@ function highlightBrigade(brigadeId) {
 
     const popup = layer.getPopup?.()
     const content = popup?.getContent?.() || ''
-    const belongs = content.includes(brigadeId) || layer.options?.color === getBrigadeColor(0)
+    const belongs = content.includes(brigadeId) || layer.options?.color === getBrigadeColor(brigadeId)
 
     if (layer.setStyle) {
       layer.setStyle({ opacity: belongs ? 0.85 : 0.1 })

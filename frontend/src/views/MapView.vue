@@ -20,15 +20,21 @@ const legendBrigades = computed(() => {
     const bid = f.properties?.brigade_id
     if (bid !== undefined) seen.add(bid)
   })
+
+  // Создаём Mapbrigade_id -> объект бригады
+  const brigadesMap = new Map(brigadesStore.items.map(b => [b.id, b]))
   
-  // Берем имена из brigadesStore, цвет вычисляем по ID для единообразия
-  return brigadesStore.items
-    .filter((b) => seen.has(b.id))
-    .map((b) => ({
-      id: b.id,
-      name: b.name,
-      color: BRIGADE_COLORS[b.id % BRIGADE_COLORS.length],
-    }))
+  // Фильтруем только те бригады, которые есть в geometry, и назначаем цвет по ID
+  return [...seen]
+    .filter(bid => brigadesMap.has(bid))
+    .map(bid => {
+      const b = brigadesMap.get(bid)
+      return {
+        id: b.id,
+        name: b.name,
+        color: BRIGADE_COLORS[b.id % BRIGADE_COLORS.length],
+      }
+    })
 })
 
 // Select options из legendBrigades

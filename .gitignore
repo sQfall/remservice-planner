@@ -29,6 +29,7 @@ env/
 # Qwen Code — персональные настройки
 .qwen/
 qwen/
+QWEN.md
 
 # IDE
 .vscode/

@@ -113,7 +113,6 @@ onMounted(() => {
           <th>Приоритет</th>
           <th>Статус</th>
           <th>Дата</th>
-          <th>Бригада</th>
           <th>Действия</th>
         </tr>
       </thead>
@@ -134,7 +133,6 @@ onMounted(() => {
             </span>
           </td>
           <td>{{ req.planned_at ? new Date(req.planned_at).toLocaleDateString('ru-RU') : '—' }}</td>
-          <td>{{ req.brigade?.name || '—' }}</td>
           <td class="actions-cell">
             <button class="btn-secondary btn-sm" v-if="req.status !== 'planned' && req.status !== 'issued'" @click="router.push(`/requests/${req.id}/edit`)">Изм.</button>
             <button class="btn-danger btn-sm" v-if="req.status !== 'planned' && req.status !== 'issued'" @click="onDelete(req.id)">Удал.</button>

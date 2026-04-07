@@ -37,8 +37,11 @@ def _register_font() -> str:
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans.ttf",
         os.path.join(os.path.dirname(__file__), "fonts", "DejaVuSans.ttf"),
-        # Windows
+        # Windows — DejaVu
         r"C:\Windows\Fonts\DejaVuSans.ttf",
+        # Windows — Arial (поддерживает кириллицу)
+        r"C:\Windows\Fonts\arial.ttf",
+        r"C:\Windows\Fonts\ARIAL.TTF",
     ]
 
     for path in font_paths:

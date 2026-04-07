@@ -175,14 +175,16 @@ async def greedy_planning(plan_date: date, db: AsyncSession, shift_limit_enabled
             departure_time = arrival_time + timedelta(minutes=est_duration)
 
             # Если включен лимит смены и заявка не влезает — пропускаем
-            if shift_limit_enabled and departure_time > shift_limit_dt:
-                skipped_for_brigade.append(req)
-                logger.info(
-                    "Бригада %d: заявка %d пропущена (departure %s > лимит %s)",
-                    brigade.id, req.id,
-                    departure_time.strftime("%H:%M"), shift_limit_dt.strftime("%H:%M"),
-                )
-                continue
+            if shift_limit_enabled:
+                print(f"  CHECK brigade={brigade.id} req={req.id} departure={departure_time.strftime('%H:%M')} limit={shift_limit_dt.strftime('%H:%M')} exceeds={departure_time > shift_limit_dt}", flush=True)
+                if departure_time > shift_limit_dt:
+                    skipped_for_brigade.append(req)
+                    logger.info(
+                        "Бригада %d: заявка %d пропущена (departure %s > лимит %s)",
+                        brigade.id, req.id,
+                        departure_time.strftime("%H:%M"), shift_limit_dt.strftime("%H:%M"),
+                    )
+                    continue
 
             # Создать RoutePoint
             route_point = RoutePoint(

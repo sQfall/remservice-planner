@@ -112,6 +112,10 @@ async def update_request(
     if not request:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
+    # Запрет на редактирование запланированных заявок
+    if request.status == RequestStatus.planned:
+        raise HTTPException(status_code=403, detail="Нельзя редактировать запланированную заявку")
+
     # Whitelist — не позволяем менять status/planned_at/completed_at/created_at через update
     ALLOWED_FIELDS = {
         "address", "latitude", "longitude", "work_type", "description",

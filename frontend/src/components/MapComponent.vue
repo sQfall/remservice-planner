@@ -127,11 +127,11 @@ function drawGeometry(geometry) {
     }
     // Обработка линий (LineString)
     else if (feature.geometry.type === 'LineString') {
-      const isGarage = props.is_garage_segment
+      const isReturnToGarage = props.garage_segment_type === 'last_to_garage'
       const latlngs = feature.geometry.coordinates.map(([lon, lat]) => [lat, lon])
 
-      if (isGarage) {
-        // Пунктир цвета бригады для сегментов от/до гаража
+      if (isReturnToGarage) {
+        // Пунктир цвета бригады только для сегмента возврата в гараж
         const line = L.polyline(latlngs, {
           color: color,
           weight: 5,
@@ -140,7 +140,7 @@ function drawGeometry(geometry) {
         })
         line.addTo(layersGroup)
       } else {
-        // Цветная сплошная линия для маршрутов
+        // Сплошная линия (маршрут между заявками И от гаража к первой заявке)
         const line = L.polyline(latlngs, {
           color: color,
           weight: 6,

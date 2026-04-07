@@ -109,7 +109,10 @@ async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db
 
     result = await db.execute(
         select(DailyPlan)
-        .options(selectinload(DailyPlan.route_points))
+        .options(
+            selectinload(DailyPlan.route_points)
+            .selectinload(RoutePoint.request)
+        )
         .where(DailyPlan.plan_date.between(day_start, day_end))
         .limit(1)
     )
@@ -144,6 +147,8 @@ async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db
         segments = []
 
     features = []
+
+    # 1. Добавляем сегменты маршрутов (линии)
     for seg in segments:
         bid = None
         if seg.from_point:
@@ -160,7 +165,6 @@ async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db
 
         geometry = None
         try:
-            import json
             geometry = json.loads(seg.geometry_json) if seg.geometry_json else None
         except (json.JSONDecodeError, ValueError):
             geometry = None
@@ -171,10 +175,54 @@ async def get_routes_geometry(plan_date: date, db: AsyncSession = Depends(get_db
                     "type": "Feature",
                     "geometry": geometry,
                     "properties": {
+                        "type": "segment",
                         "brigade_id": bid,
                         "brigade_name": brigade.name,
                         "color": color,
                         "is_garage_segment": seg.is_garage_segment,
+                    },
+                }
+            )
+
+    # 2. Добавляем точки заявок
+    for rp in plan.route_points:
+        if rp.request:
+            bid = rp.brigade_id
+            if bid in brigades_map:
+                brigade = brigades_map[bid]
+                brigade_index = list(brigades_map.keys()).index(bid)
+                color = BRIGADE_COLORS[brigade_index % len(BRIGADE_COLORS)]
+                
+                features.append(
+                    {
+                        "type": "Feature",
+                        "geometry": {"type": "Point", "coordinates": [rp.request.longitude, rp.request.latitude]},
+                        "properties": {
+                            "type": "request",
+                            "brigade_id": bid,
+                            "request_id": rp.request.id,
+                            "address": rp.request.address,
+                            "color": color,
+                        },
+                    }
+                )
+
+    # 3. Добавляем точки гаражей
+    for bid in brigade_ids:
+        if bid in brigades_map:
+            brigade = brigades_map[bid]
+            brigade_index = list(brigades_map.keys()).index(bid)
+            color = BRIGADE_COLORS[brigade_index % len(BRIGADE_COLORS)]
+            
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [brigade.garage_longitude, brigade.garage_latitude]},
+                    "properties": {
+                        "type": "garage",
+                        "brigade_id": bid,
+                        "brigade_name": brigade.name,
+                        "color": color,
                     },
                 }
             )

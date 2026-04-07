@@ -51,110 +51,85 @@ function drawGeometry(geometry) {
     }
   })
 
-  // Рисуем сегменты
+  const pointSet = new Map() // Для fitBounds
+
   geometry.features.forEach((feature) => {
     const props = feature.properties || {}
-    const isGarage = props.is_garage_segment
     const bid = props.brigade_id
     const brigadeIdx = brigadeIndices[bid] ?? 0
-    const color = getBrigadeColor(brigadeIdx)
+    const color = props.color || getBrigadeColor(brigadeIdx)
 
-    if (feature.geometry.type !== 'LineString') return
-
-    const latlngs = feature.geometry.coordinates.map(([lon, lat]) => [lat, lon])
-
-    if (isGarage) {
-      // Серый пунктир для гаражных сегментов
-      const line = L.polyline(latlngs, {
-        color: '#94a3b8',
-        weight: 2,
-        dashArray: '6, 6',
-        opacity: 0.7,
-      })
-      line.addTo(layersGroup)
-    } else {
-      const line = L.polyline(latlngs, {
-        color,
-        weight: 3,
-        opacity: 0.85,
-      })
-      line.addTo(layersGroup)
-
-      // Popup с именем бригады
-      if (props.brigade_name) {
-        line.bindPopup(props.brigade_name)
-      }
-    }
-  })
-
-  // Собираем точки маршрутов и гаражи из сегментов
-  const pointSet = new Map() // key: "lat,lon" -> { lat, lon, brigadeId, brigadeName, sequences: [], isGarage: bool }
-
-  geometry.features.forEach((feature) => {
-    if (feature.geometry.type !== 'LineString') return
-
-    const props = feature.properties || {}
-    const coords = feature.geometry.coordinates
-    const isGarage = props.is_garage_segment
-    const brigadeName = props.brigade_name
-    const bid = props.brigade_id
-
-    // Берём только первую и последнюю точку каждого сегмента как маркеры
-    const endpoints = [coords[0], coords[coords.length - 1]]
-
-    endpoints.forEach(([lon, lat]) => {
-      const key = `${lat.toFixed(6)},${lon.toFixed(6)}`
-      if (!pointSet.has(key)) {
-        pointSet.set(key, {
-          lat,
-          lon,
-          brigadeId: bid,
-          brigadeName,
-          sequences: [],
-          isGarage: isGarage,
+    // Обработка точек (Point)
+    if (feature.geometry.type === 'Point') {
+      const [lon, lat] = feature.geometry.coordinates
+      const pointType = props.type // 'request' или 'garage'
+      
+      let marker
+      if (pointType === 'garage') {
+        // Маркер гаража — иконка домика или крупная точка
+        marker = L.circleMarker([lat, lon], {
+          radius: 12,
+          fillColor: '#475569', // Серый цвет для гаража
+          color: '#fff',
+          weight: 2,
+          fillOpacity: 1,
+          dashArray: '2, 2', // Пунктирная обводка для отличия
         })
+        const popupContent = `<b>Гараж</b><br>${props.brigade_name || 'Бригада #' + bid}`
+        marker.bindPopup(popupContent)
+      } else {
+        // Маркер заявки — цветной круг
+        marker = L.circleMarker([lat, lon], {
+          radius: 8,
+          fillColor: color,
+          color: '#fff',
+          weight: 2,
+          fillOpacity: 0.9,
+        })
+        const popupContent = `<b>Заявка</b><br>${props.address || 'ID: ' + props.request_id}<br><span style="color:${color}">●</span> ${props.brigade_name || ''}`
+        marker.bindPopup(popupContent)
       }
-    })
-  })
-
-  // Добавляем маркеры точек
-  pointSet.forEach((point, _key) => {
-    const brigadeIdx = brigadeIndices[point.brigadeId] ?? 0
-    const color = getBrigadeColor(brigadeIdx)
-
-    if (point.isGarage) {
-      // Маркер гаража — больший радиус
-      const marker = L.circleMarker([point.lat, point.lon], {
-        radius: 10,
-        fillColor: color,
-        color: '#fff',
-        weight: 2,
-        fillOpacity: 0.9,
-      })
-      marker.bindPopup(`Гараж: ${point.brigadeName || point.brigadeId}`)
       marker.addTo(layersGroup)
-    } else {
-      // Маркер точки маршрута
-      const marker = L.circleMarker([point.lat, point.lon], {
-        radius: 8,
-        fillColor: color,
-        color: '#fff',
-        weight: 2,
-        fillOpacity: 0.85,
-      })
+      pointSet.set(`${lat.toFixed(6)},${lon.toFixed(6)}`, { lat, lon })
+    }
+    // Обработка линий (LineString)
+    else if (feature.geometry.type === 'LineString') {
+      const isGarage = props.is_garage_segment
+      const latlngs = feature.geometry.coordinates.map(([lon, lat]) => [lat, lon])
 
-      const popupContent = point.brigadeName
-        ? `<div>${point.brigadeName}</div>`
-        : `Бригада #${point.brigadeId}`
-      marker.bindPopup(popupContent)
-      marker.addTo(layersGroup)
+      if (isGarage) {
+        // Серый пунктир для гаражных сегментов
+        const line = L.polyline(latlngs, {
+          color: '#94a3b8',
+          weight: 2,
+          dashArray: '4, 4',
+          opacity: 0.7,
+        })
+        line.addTo(layersGroup)
+      } else {
+        // Цветная сплошная линия для маршрутов
+        const line = L.polyline(latlngs, {
+          color: color,
+          weight: 3,
+          opacity: 0.85,
+        })
+        line.addTo(layersGroup)
+        if (props.brigade_name) {
+          line.bindPopup(props.brigade_name)
+        }
+      }
+
+      // Собираем координаты для fitBounds
+      latlngs.forEach(([lat, lon]) => {
+        pointSet.set(`${lat.toFixed(6)},${lon.toFixed(6)}`, { lat, lon })
+      })
     }
   })
 
   // Fit bounds
   if (pointSet.size > 0) {
     const bounds = [...pointSet.values()].map((p) => [p.lat, p.lon])
-    map.fitBounds(bounds, { padding: [30, 30] })
+    map.fitBounds(bounds, { padding: [50, 50] })
   }
 }
 

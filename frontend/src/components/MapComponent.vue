@@ -40,19 +40,13 @@ function drawGeometry(geometry) {
 
   if (!geometry || !geometry.features || !geometry.features.length) return
 
-  // Собираем уникальные бригады для определения цвета
-  const brigadeIndices = {}
-  let colourIndex = 0
-
-  geometry.features.forEach((feature) => {
-    const bid = feature.properties?.brigade_id
-    if (bid !== undefined && !(bid in brigadeIndices)) {
-      brigadeIndices[bid] = colourIndex++
-    }
-  })
-
   const pointSet = new Map() // Для fitBounds
   const brigadePoints = {} // { brigadeId: [{lon, lat, label}] }
+
+  // Вспомогательная функция для получения цвета по ID бригады
+  function getBrigadeColor(bid) {
+    return BRIGADE_COLORS[bid % BRIGADE_COLORS.length]
+  }
 
   // 1. Сначала собираем точки (заявки и гаражи), чтобы потом определять подписи для линий
   geometry.features.forEach((feature) => {
@@ -94,13 +88,13 @@ function drawGeometry(geometry) {
   geometry.features.forEach((feature) => {
     const props = feature.properties || {}
     const bid = props.brigade_id
-    const brigadeIdx = brigadeIndices[bid] ?? 0
-    const color = props.color || getBrigadeColor(brigadeIdx)
+    const color = props.color || getBrigadeColor(bid)
 
     // Обработка точек (Point)
     if (feature.geometry.type === 'Point') {
       const [lon, lat] = feature.geometry.coordinates
       const pointType = props.type // 'request' или 'garage'
+      const color = props.color || getBrigadeColor(bid)
       
       let marker
       if (pointType === 'garage') {

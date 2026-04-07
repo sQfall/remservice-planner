@@ -21,13 +21,13 @@ const legendBrigades = computed(() => {
     if (bid !== undefined) seen.add(bid)
   })
   
-  // Берем имена и цвета из загруженного списка бригад (более надежно)
+  // Берем имена из brigadesStore, цвет вычисляем по ID для единообразия
   return brigadesStore.items
     .filter((b) => seen.has(b.id))
-    .map((b, index) => ({
+    .map((b) => ({
       id: b.id,
       name: b.name,
-      color: BRIGADE_COLORS[index % BRIGADE_COLORS.length],
+      color: BRIGADE_COLORS[b.id % BRIGADE_COLORS.length],
     }))
 })
 

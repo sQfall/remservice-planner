@@ -1,9 +1,10 @@
 <script setup>
-import { onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, watch, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useRequestsStore } from '@/stores/requests'
 
 const router = useRouter()
+const route = useRoute()
 const store = useRequestsStore()
 
 const statusLabels = {
@@ -67,6 +68,10 @@ async function onDelete(id) {
 }
 
 onMounted(() => {
+  store.loadRequests()
+})
+
+watch(() => route.path, () => {
   store.loadRequests()
 })
 </script>

@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from database import init_db, AsyncSessionLocal
-from models.brigade import Brigade, Specialization
+from models.brigade import Brigade, BrigadeMember, Specialization
+from models.vehicle import Vehicle
 from routers import requests, brigades, planning, route_sheets
 from services import geocoding_service
 
@@ -19,6 +20,14 @@ DEFAULT_BRIGADES = [
         "shift_end": time(17, 0),
         "garage_latitude": 55.7558,
         "garage_longitude": 37.6173,
+        "members": [
+            {"full_name": "Иванов Иван Иванович", "role": "Бригадир"},
+            {"full_name": "Петров Пётр Петрович", "role": "Электрик"},
+            {"full_name": "Сидоров Алексей Николаевич", "role": "Электрик"},
+        ],
+        "vehicles": [
+            {"plate": "А123БВ77", "vehicle_type": "Газель", "year": 2020},
+        ],
     },
     {
         "name": "Бригада №2",
@@ -27,6 +36,14 @@ DEFAULT_BRIGADES = [
         "shift_end": time(17, 0),
         "garage_latitude": 55.7558,
         "garage_longitude": 37.6173,
+        "members": [
+            {"full_name": "Козлов Дмитрий Сергеевич", "role": "Бригадир"},
+            {"full_name": "Морозов Виктор Андреевич", "role": "Сантехник"},
+            {"full_name": "Волков Андрей Игоревич", "role": "Сантехник"},
+        ],
+        "vehicles": [
+            {"plate": "В456ГД77", "vehicle_type": "Лада Ларгус", "year": 2021},
+        ],
     },
     {
         "name": "Бригада №3",
@@ -35,6 +52,14 @@ DEFAULT_BRIGADES = [
         "shift_end": time(17, 0),
         "garage_latitude": 55.7558,
         "garage_longitude": 37.6173,
+        "members": [
+            {"full_name": "Лебедев Максим Олегович", "role": "Бригадир"},
+            {"full_name": "Егоров Сергей Владимирович", "role": "Инженер вентиляции"},
+            {"full_name": "Кузнецов Денис Павлович", "role": "Инженер вентиляции"},
+        ],
+        "vehicles": [
+            {"plate": "Е789ЖЗ77", "vehicle_type": "Ford Transit", "year": 2019},
+        ],
     },
     {
         "name": "Бригада №4",
@@ -43,12 +68,20 @@ DEFAULT_BRIGADES = [
         "shift_end": time(17, 0),
         "garage_latitude": 55.7558,
         "garage_longitude": 37.6173,
+        "members": [
+            {"full_name": "Новиков Александр Михайлович", "role": "Бригадир"},
+            {"full_name": "Соколов Роман Юрьевич", "role": "Мастер"},
+            {"full_name": "Попов Виталий Константинович", "role": "Мастер"},
+        ],
+        "vehicles": [
+            {"plate": "И012КЛ77", "vehicle_type": "УАЗ Профи", "year": 2022},
+        ],
     },
 ]
 
 
 async def seed_default_brigades():
-    """Создаёт 4 бригады по умолчанию, если их нет"""
+    """Создаёт 4 бригады по умолчанию с участниками и автомобилями, если их нет"""
     from sqlalchemy import select
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(Brigade))
@@ -56,8 +89,19 @@ async def seed_default_brigades():
 
         if len(existing_brigades) == 0:
             for brigade_data in DEFAULT_BRIGADES:
+                members_data = brigade_data.pop("members")
+                vehicles_data = brigade_data.pop("vehicles")
+
                 brigade = Brigade(**brigade_data)
                 session.add(brigade)
+                await session.flush()
+
+                for member in members_data:
+                    session.add(BrigadeMember(brigade_id=brigade.id, **member))
+
+                for vehicle in vehicles_data:
+                    session.add(Vehicle(brigade_id=brigade.id, **vehicle))
+
             await session.commit()
 
 

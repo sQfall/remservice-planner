@@ -14,7 +14,6 @@ class WorkType(str, enum.Enum):
     electrical = "electrical"
     plumbing = "plumbing"
     hvac = "hvac"
-    structural = "structural"
     general = "general"
 
 

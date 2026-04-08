@@ -34,9 +34,8 @@ let tileLayer = null
 const workTypeOptions = [
   { value: 'electrical', label: 'Электромонтаж' },
   { value: 'plumbing', label: 'Сантехника' },
-  { value: 'hvac', label: 'Отопление' },
-  { value: 'structural', label: 'Строительные' },
-  { value: 'general', label: 'Общие' },
+  { value: 'hvac', label: 'Вентиляция и кондиционирование' },
+  { value: 'general', label: 'Общие работы' },
 ]
 
 const priorityOptions = [

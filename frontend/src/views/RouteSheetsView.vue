@@ -17,7 +17,6 @@ const workTypeLabels = {
   electrical: 'Электромонтаж',
   plumbing: 'Сантехника',
   hvac: 'Вентиляция',
-  structural: 'Строительные',
   general: 'Общие',
 }
 

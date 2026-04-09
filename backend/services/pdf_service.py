@@ -168,7 +168,7 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
         ["Специализация:", brigade_data.get("specialization", "")],
         ["Автомобиль:", f"{brigade_data.get('vehicle_type', '')} {brigade_data.get('vehicle_plate', '')}"],
     ]
-    elements.append(_header_table(brigade_info, col_widths=[4 * cm, 13 * cm]))
+    elements.append(_header_table(brigade_info, col_widths=[100 * mm, 70 * mm]))
     elements.append(Spacer(1, 5 * mm))
 
     # Состав бригады
@@ -177,7 +177,7 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
         members_header = [
             [Paragraph("<b>Состав бригады</b>", ParagraphStyle("Bold", fontName=font_name, fontSize=FONT_SIZE))]
         ]
-        members_table = Table(members_header, colWidths=[17 * cm])
+        members_table = Table(members_header, colWidths=[10 * cm])
         members_table.setStyle(
             TableStyle(
                 [
@@ -193,7 +193,7 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
         for m in members:
             members_data.append([m.get("full_name", ""), m.get("role", "")])
 
-        members_tbl = _styled_table(members_data, col_widths=[10 * cm, 7 * cm])
+        members_tbl = _styled_table(members_data, col_widths=[100 * mm, 70 * mm])
         # Стиль заголовка
         style_additions = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
@@ -210,7 +210,7 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
         route_header = [
             [Paragraph("<b>Маршрут</b>", ParagraphStyle("BoldRoute", fontName=font_name, fontSize=FONT_SIZE))]
         ]
-        route_header_table = Table(route_header, colWidths=[17 * cm])
+        route_header_table = Table(route_header, colWidths=[170 * mm])
         route_header_table.setStyle(
             TableStyle(
                 [

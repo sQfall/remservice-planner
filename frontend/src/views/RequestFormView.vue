@@ -217,6 +217,8 @@ async function onSubmit() {
     latitude: form.value.latitude || 0,
     longitude: form.value.longitude || 0,
     planned_at: form.value.planned_at ? new Date(form.value.planned_at).toISOString() : null,
+    time_window_start: form.value.time_window_start || null,
+    time_window_end: form.value.time_window_end || null,
   }
 
   try {

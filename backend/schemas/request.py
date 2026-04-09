@@ -1,7 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, time
 from pydantic import BaseModel, ConfigDict, Field
-from schemas.brigade import BrigadeShort
 
 
 class ServiceRequestBase(BaseModel):
@@ -50,4 +49,3 @@ class ServiceRequestResponse(ServiceRequestBase):
     status: str
     created_at: datetime
     planned_at: datetime | None = None
-    brigade: BrigadeShort | None = None

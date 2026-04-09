@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, time
 from pydantic import BaseModel, ConfigDict, Field
 from schemas.brigade import BrigadeShort
 
@@ -14,6 +14,8 @@ class ServiceRequestBase(BaseModel):
     contact_person: str | None = None
     phone: str | None = None
     estimated_duration: int | None = None
+    time_window_start: time | None = None
+    time_window_end: time | None = None
 
 
 class ServiceRequestCreate(ServiceRequestBase):
@@ -37,6 +39,8 @@ class ServiceRequestUpdate(BaseModel):
     phone: str | None = None
     estimated_duration: int | None = None
     planned_at: datetime | None = None
+    time_window_start: time | None = None
+    time_window_end: time | None = None
 
 
 class ServiceRequestResponse(ServiceRequestBase):

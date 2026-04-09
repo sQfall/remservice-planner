@@ -20,6 +20,8 @@ const form = ref({
   planned_at: '',
   estimated_duration: 60,
   priority: 'medium',
+  time_window_start: '',
+  time_window_end: '',
 })
 
 const errors = ref({})
@@ -137,6 +139,8 @@ onMounted(async () => {
         planned_at: data.planned_at ? new Date(data.planned_at).toISOString().slice(0, 16) : '',
         estimated_duration: data.estimated_duration || 60,
         priority: data.priority || 'medium',
+        time_window_start: data.time_window_start || '',
+        time_window_end: data.time_window_end || '',
       }
     } catch (e) {
       router.push('/')
@@ -166,6 +170,19 @@ function validate() {
   }
   if (!form.value.planned_at) {
     errors.value.planned_at = 'Укажите желаемую дату'
+  }
+  // Валидация временного окна: если одно заполнено — другое обязательно
+  if (form.value.time_window_start || form.value.time_window_end) {
+    if (!form.value.time_window_start) {
+      errors.value.time_window_start = 'Укажите начало окна'
+    }
+    if (!form.value.time_window_end) {
+      errors.value.time_window_end = 'Укажите конец окна'
+    }
+    if (form.value.time_window_start && form.value.time_window_end &&
+        form.value.time_window_start >= form.value.time_window_end) {
+      errors.value.time_window_end = 'Конец окна должен быть позже начала'
+    }
   }
   return Object.keys(errors.value).length === 0
 }
@@ -313,6 +330,33 @@ function onCancel() {
       </div>
 
       <div class="form-group">
+        <label>Временное окно визита</label>
+        <p class="window-hint">Необязательно. Если заполнено — бригада прибудет в указанный интервал.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="time_window_start">Начало окна</label>
+            <input
+              id="time_window_start"
+              v-model="form.time_window_start"
+              type="time"
+              :class="{ 'input-error': errors.time_window_start }"
+            />
+            <span v-if="errors.time_window_start" class="error-text">{{ errors.time_window_start }}</span>
+          </div>
+          <div class="form-group">
+            <label for="time_window_end">Конец окна</label>
+            <input
+              id="time_window_end"
+              v-model="form.time_window_end"
+              type="time"
+              :class="{ 'input-error': errors.time_window_end }"
+            />
+            <span v-if="errors.time_window_end" class="error-text">{{ errors.time_window_end }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
         <label for="priority">Приоритет</label>
         <select id="priority" v-model="form.priority">
           <option v-for="opt in priorityOptions" :key="opt.value" :value="opt.value">
@@ -415,6 +459,12 @@ function onCancel() {
 }
 
 .map-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.4rem 0;
+}
+
+.window-hint {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
   margin: 0 0 0.4rem 0;

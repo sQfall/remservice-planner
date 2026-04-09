@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time as dt_time
 from typing import Any
 
 from sqlalchemy import select
@@ -34,25 +34,54 @@ def _nearest_neighbor_order(
     requests: list[ServiceRequest],
     start_coords: tuple[float, float],  # (lat, lon)
 ) -> list[ServiceRequest]:
-    """Упорядочить заявки методом nearest neighbor."""
+    """Упорядочить заявки методом nearest neighbor с учётом временных окон.
+
+    Заявки с временными окнами получают приоритет и сортируются по
+    времени начала окна. Заявки без окон — после всех оконных.
+    """
     if not requests:
         return []
 
-    remaining_indices = list(range(len(requests)))
+    # Разделяем: с окнами и без
+    with_windows = [r for r in requests if r.time_window_start is not None and r.time_window_end is not None]
+    without_windows = [r for r in requests if r.time_window_start is None or r.time_window_end is None]
+
+    # Сортируем с окнами по времени начала окна
+    with_windows.sort(key=lambda r: r.time_window_start)
+
+    # Для каждой группы применяем nearest neighbor
     ordered: list[ServiceRequest] = []
     current_lat, current_lon = start_coords
 
-    while remaining_indices:
+    # Сначала заявки с окнами —nearest neighbor, но respecting window order
+    remaining = list(with_windows)
+    while remaining:
+        # Выбираем ближайшую из допустимых (по порядку окон)
         nearest_idx = min(
-            remaining_indices,
+            range(len(remaining)),
             key=lambda i: _haversine_distance(
                 current_lat, current_lon,
-                requests[i].latitude, requests[i].longitude
+                remaining[i].latitude, remaining[i].longitude
             ),
         )
-        nearest = requests[nearest_idx]
+        nearest = remaining[nearest_idx]
         ordered.append(nearest)
-        remaining_indices.remove(nearest_idx)
+        remaining.pop(nearest_idx)
+        current_lat, current_lon = nearest.latitude, nearest.longitude
+
+    # Теперь заявки без окон — чистый nearest neighbor
+    remaining = list(without_windows)
+    while remaining:
+        nearest_idx = min(
+            range(len(remaining)),
+            key=lambda i: _haversine_distance(
+                current_lat, current_lon,
+                remaining[i].latitude, remaining[i].longitude
+            ),
+        )
+        nearest = remaining[nearest_idx]
+        ordered.append(nearest)
+        remaining.pop(nearest_idx)
         current_lat, current_lon = nearest.latitude, nearest.longitude
 
     return ordered
@@ -61,6 +90,37 @@ def _nearest_neighbor_order(
 def _is_brigade_compatible(brigade: Brigade, work_type: str) -> bool:
     """Проверить совместимость бригады с типом работ."""
     return brigade.specialization.value == work_type or brigade.specialization.value == "universal"
+
+
+def _check_time_window(
+    arrival_time: datetime,
+    request: ServiceRequest,
+) -> tuple[datetime, bool]:
+    """Проверить и скорректировать время начала работ с учётом временного окна.
+
+    Returns:
+        (actual_start_time, is_within_window)
+        - Если окна нет — возвращает arrival_time и True.
+        - Если arrival_time < window_start — ждём до window_start, возвращаем (window_start, True).
+        - Если arrival_time > window_end — возвращаем (arrival_time, False) — конфликт.
+    """
+    if request.time_window_start is None or request.time_window_end is None:
+        return arrival_time, True
+
+    # Преобразуем время окна в datetime на тот же день
+    window_start = datetime.combine(arrival_time.date(), request.time_window_start)
+    window_end = datetime.combine(arrival_time.date(), request.time_window_end)
+
+    if arrival_time < window_start:
+        # Бригада приехала раньше — ждёт начала окна
+        return window_start, True
+
+    if arrival_time > window_end:
+        # Бригада не успевает в окно — конфликт
+        return arrival_time, False
+
+    # Внутри окна — начинаем сразу
+    return arrival_time, True
 
 
 async def _load_pending_requests(plan_date: date, db: AsyncSession) -> list[ServiceRequest]:
@@ -158,7 +218,22 @@ async def _build_brigade_route(
         duration_sec = route_data["duration"] if route_data else 600
         duration_min = max(1, int(duration_sec / 60))
 
-        arrival_time = current_time + timedelta(minutes=duration_min)
+        raw_arrival_time = current_time + timedelta(minutes=duration_min)
+
+        # Проверяем временное окно
+        actual_start, is_within_window = _check_time_window(raw_arrival_time, req)
+
+        if not is_within_window:
+            # Заявка не влезает в временное окно — пропускаем
+            skipped_for_brigade.append(req)
+            logger.info(
+                "Бригада %d: заявка %d пропущена (прибытие %s > конец окна %s)",
+                brigade.id, req.id,
+                raw_arrival_time.strftime("%H:%M"), req.time_window_end.strftime("%H:%M"),
+            )
+            continue
+
+        arrival_time = actual_start
         est_duration = req.estimated_duration or 60
         departure_time = arrival_time + timedelta(minutes=est_duration)
 
@@ -254,9 +329,12 @@ async def _handle_skipped_requests(
             req.priority = Priority.high
             req.planned_at = datetime.combine(next_day, datetime.min.time()) + timedelta(hours=8)
             shifted_requests.append(req)
+            reason = ""
+            if req.time_window_start and req.time_window_end:
+                reason = f" (конфликт с окном {req.time_window_start.strftime('%H:%M')}-{req.time_window_end.strftime('%H:%M')})"
             logger.info(
-                "Заявка #%d перенесена на %s с приоритетом high",
-                req.id, next_day
+                "Заявка #%d перенесена на %s с приоритетом high%s",
+                req.id, next_day, reason,
             )
 
     return shifted_requests

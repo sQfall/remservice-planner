@@ -226,6 +226,7 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
             [
                 Paragraph("<b>№</b>", ParagraphStyle("BN", fontName=font_name, fontSize=FONT_SIZE)),
                 Paragraph("<b>Время</b>", ParagraphStyle("BT", fontName=font_name, fontSize=FONT_SIZE)),
+                Paragraph("<b>Окно</b>", ParagraphStyle("BWn", fontName=font_name, fontSize=FONT_SIZE)),
                 Paragraph("<b>Адрес</b>", ParagraphStyle("BA", fontName=font_name, fontSize=FONT_SIZE)),
                 Paragraph("<b>Клиент</b>", ParagraphStyle("BC", fontName=font_name, fontSize=FONT_SIZE)),
                 Paragraph("<b>Телефон</b>", ParagraphStyle("BP", fontName=font_name, fontSize=FONT_SIZE)),
@@ -243,11 +244,26 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
                 else:
                     time_str = str(arrival_time)
 
+            # Форматируем временное окно
+            tw_start = point.get("time_window_start")
+            tw_end = point.get("time_window_end")
+            if tw_start and tw_end:
+                # tw_start/tw_end — datetime.time или строки
+                if isinstance(tw_start, datetime):
+                    window_str = tw_start.strftime("%H:%M") + "–" + tw_end.strftime("%H:%M")
+                elif isinstance(tw_start, str):
+                    window_str = tw_start[:5] + "–" + tw_end[:5]
+                else:
+                    window_str = tw_start.strftime("%H:%M") + "–" + tw_end.strftime("%H:%M")
+            else:
+                window_str = "—"
+
             est_duration = point.get("estimated_duration") or 60
             route_data.append(
                 [
                     str(point.get("sequence", "")),
                     time_str,
+                    Paragraph(window_str, ParagraphStyle("Win", fontName=font_name, fontSize=FONT_SIZE - 1)),
                     Paragraph(point.get("address", ""), ParagraphStyle("Addr", fontName=font_name, fontSize=FONT_SIZE)),
                     Paragraph(point.get("contact_person", ""), ParagraphStyle("CP", fontName=font_name, fontSize=FONT_SIZE)),
                     Paragraph(point.get("phone", ""), ParagraphStyle("Ph", fontName=font_name, fontSize=FONT_SIZE)),
@@ -256,13 +272,14 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
                 ]
             )
 
-        col_widths = [11 * mm, 16 * mm, 49 * mm, 31 * mm, 22 * mm, 22 * mm, 19 * mm]
+        col_widths = [9 * mm, 13 * mm, 16 * mm, 40 * mm, 27 * mm, 19 * mm, 20 * mm, 16 * mm]
         route_tbl = _styled_table(route_data, col_widths=col_widths)
         hdr_style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("ALIGN", (0, 0), (0, -1), "CENTER"),
-            ("ALIGN", (6, 0), (6, -1), "CENTER"),
+            ("ALIGN", (7, 0), (7, -1), "CENTER"),
             ("ALIGN", (1, 0), (1, -1), "CENTER"),
+            ("ALIGN", (2, 0), (2, -1), "CENTER"),
         ]
         route_tbl.setStyle(TableStyle(hdr_style))
         elements.append(route_tbl)

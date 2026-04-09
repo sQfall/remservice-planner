@@ -105,6 +105,8 @@ async def get_route_sheets(plan_date: date, db: AsyncSession = Depends(get_db)):
                 "work_type": req.work_type.value if req.work_type else "",
                 "description": req.description,
                 "estimated_duration": req.estimated_duration,
+                "time_window_start": req.time_window_start.isoformat() if req.time_window_start else None,
+                "time_window_end": req.time_window_end.isoformat() if req.time_window_end else None,
             },
         })
 
@@ -222,6 +224,8 @@ async def get_route_sheet_pdf(
                 "work_type": rp.request.work_type.value if rp.request.work_type else "",
                 "description": rp.request.description,
                 "estimated_duration": rp.request.estimated_duration,
+                "time_window_start": rp.request.time_window_start,
+                "time_window_end": rp.request.time_window_end,
             }
             for rp in route_points
         ],

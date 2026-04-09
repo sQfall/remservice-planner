@@ -1,8 +1,8 @@
 from __future__ import annotations
 import enum
-from datetime import datetime
+from datetime import datetime, time
 from typing import TYPE_CHECKING
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, Enum, Time, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
@@ -47,5 +47,7 @@ class ServiceRequest(Base):
     contact_person: Mapped[str | None] = mapped_column(String(200), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     estimated_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    time_window_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    time_window_end: Mapped[time | None] = mapped_column(Time, nullable=True)
 
     route_point: Mapped["RoutePoint | None"] = relationship(back_populates="request")

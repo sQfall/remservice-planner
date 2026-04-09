@@ -92,6 +92,8 @@ async def create_request(
         phone=data.phone,
         estimated_duration=data.estimated_duration,
         planned_at=data.planned_at,
+        time_window_start=data.time_window_start,
+        time_window_end=data.time_window_end,
     )
     db.add(request)
     await db.commit()
@@ -122,6 +124,7 @@ async def update_request(
     ALLOWED_FIELDS = {
         "address", "latitude", "longitude", "work_type", "description",
         "priority", "contact_person", "phone", "estimated_duration", "planned_at",
+        "time_window_start", "time_window_end",
     }
     update_data = {k: v for k, v in data.model_dump(exclude_unset=True).items() if k in ALLOWED_FIELDS}
     for key, value in update_data.items():

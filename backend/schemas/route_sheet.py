@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, time
 from pydantic import BaseModel, ConfigDict
 from schemas.planning import RoutePointResponse, RouteSegmentResponse
 from schemas.brigade import BrigadeResponse
@@ -16,6 +16,8 @@ class RouteSheetPoint(BaseModel):
     contact_person: str | None = None
     phone: str | None = None
     description: str | None = None
+    time_window_start: time | None = None
+    time_window_end: time | None = None
 
 
 class RouteSheetSegment(BaseModel):

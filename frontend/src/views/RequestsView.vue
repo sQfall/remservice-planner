@@ -46,6 +46,13 @@ function formatDate(dateStr) {
   return `${d}.${m}.${y}`
 }
 
+function formatTimeWindow(startTime, endTime) {
+  if (!startTime || !endTime) return '—'
+  // startTime и endTime приходят как строки "HH:MM:SS" или "HH:MM"
+  const format = (t) => t.slice(0, 5)
+  return `${format(startTime)}–${format(endTime)}`
+}
+
 function onFilterChange() {
   store.loadRequests()
 }
@@ -114,6 +121,7 @@ watch(() => route.path, () => {
           <th>Клиент</th>
           <th>Адрес</th>
           <th>Тип работ</th>
+          <th>Время</th>
           <th>Приоритет</th>
           <th>Статус</th>
           <th>Дата</th>
@@ -126,6 +134,7 @@ watch(() => route.path, () => {
           <td>{{ req.contact_person || '—' }}</td>
           <td>{{ req.address }}</td>
           <td>{{ workTypeLabels[req.work_type] || req.work_type }}</td>
+          <td class="time-window-cell">{{ formatTimeWindow(req.time_window_start, req.time_window_end) }}</td>
           <td>
             <span :class="priorityClass(req.priority)">
               {{ priorityLabels[req.priority] || req.priority }}
@@ -228,6 +237,13 @@ watch(() => route.path, () => {
 .actions-cell {
   display: flex;
   gap: 0.4rem;
+}
+
+.time-window-cell {
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
 }
 
 .badge-priority {

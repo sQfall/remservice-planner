@@ -433,16 +433,10 @@ async def reset_plan(
     if not plan:
         return  # План уже отсутствует — это нормально
 
-    # Удалить сегменты для каждого route_point
-    for rp in plan.route_points:
-        segments = await db.execute(
-            select(RouteSegment).where(
-                (RouteSegment.from_point_id == rp.id) | (RouteSegment.to_point_id == rp.id)
-            )
-        )
-        for seg in segments.scalars().all():
-            await db.delete(seg)
+    # Удалить сегменты и route_points
+    rp_ids = [rp.id for rp in plan.route_points]
 
+    for rp in plan.route_points:
         # Вернуть заявку в статус "new"
         req = await db.execute(
             select(ServiceRequest).where(ServiceRequest.id == rp.request_id)
@@ -450,17 +444,15 @@ async def reset_plan(
         request_obj = req.scalar_one_or_none()
         if request_obj:
             request_obj.status = RequestStatus.new
-            # НЕ сбрасываем planned_at — это желаемая дата выполнения
 
         await db.delete(rp)
 
-    # Удалить оставшиеся сегменты (гаражные без from/to point)
-    rp_ids = [rp.id for rp in plan.route_points]
+    # Удалить все сегменты, связанные с route_points этого плана
     if rp_ids:
         await db.execute(
             RouteSegment.__table__.delete().where(
-                RouteSegment.from_point_id.in_(rp_ids)
-                | RouteSegment.to_point_id.in_(rp_ids)
+                (RouteSegment.from_point_id.in_(rp_ids)) |
+                (RouteSegment.to_point_id.in_(rp_ids))
             )
         )
 

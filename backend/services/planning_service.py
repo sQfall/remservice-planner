@@ -34,10 +34,10 @@ def _nearest_neighbor_order(
     requests: list[ServiceRequest],
     start_coords: tuple[float, float],  # (lat, lon)
 ) -> list[ServiceRequest]:
-    """Упорядочить заявки методом nearest neighbor с учётом временных окон.
+    """Упорядочить заявки методом nearest neighbor.
 
     Заявки с временными окнами получают приоритет и сортируются по
-    времени начала окна. Заявки без окон — после всех оконных.
+    времени начала окна, затем nearest neighbor применяется внутри групп.
     """
     if not requests:
         return []
@@ -87,6 +87,13 @@ def _nearest_neighbor_order(
     return ordered
 
 
+def _is_brigade_available_at(brigade: Brigade, check_time: datetime) -> bool:
+    """Проверить, что бригада работает в указанное время."""
+    shift_start = datetime.combine(check_time.date(), brigade.shift_start)
+    shift_end = datetime.combine(check_time.date(), brigade.shift_end)
+    return shift_start <= check_time <= shift_end
+
+
 def _is_brigade_compatible(brigade: Brigade, work_type: str) -> bool:
     """Проверить совместимость бригады с типом работ."""
     return brigade.specialization.value == work_type or brigade.specialization.value == "universal"
@@ -95,32 +102,47 @@ def _is_brigade_compatible(brigade: Brigade, work_type: str) -> bool:
 def _check_time_window(
     arrival_time: datetime,
     request: ServiceRequest,
-) -> tuple[datetime, bool]:
-    """Проверить и скорректировать время начала работ с учётом временного окна.
+    brigade: Brigade,
+) -> tuple[datetime, bool, str]:
+    """Проверить и скорректировать время начала работ с учётом временного окна и смены бригады.
 
     Returns:
-        (actual_start_time, is_within_window)
-        - Если окна нет — возвращает arrival_time и True.
-        - Если arrival_time < window_start — ждём до window_start, возвращаем (window_start, True).
-        - Если arrival_time > window_end — возвращаем (arrival_time, False) — конфликт.
+        (actual_start_time, is_feasible, reason)
+        - Если окна нет — возвращаем arrival_time и True.
+        - Если окно есть:
+            - arrival_time < window_start: ждём до window_start (если window_start в смене) → True
+            - arrival_time внутри окна: начинаем сразу → True
+            - arrival_time > window_end: → False (конфликт)
+            - window_start или window_end вне смены бригады: → False
     """
+    # Проверяем смену бригады
+    shift_start = datetime.combine(arrival_time.date(), brigade.shift_start)
+    shift_end = datetime.combine(arrival_time.date(), brigade.shift_end)
+
+    if arrival_time < shift_start:
+        arrival_time = shift_start
+
     if request.time_window_start is None or request.time_window_end is None:
-        return arrival_time, True
+        return arrival_time, True, ""
 
     # Преобразуем время окна в datetime на тот же день
     window_start = datetime.combine(arrival_time.date(), request.time_window_start)
     window_end = datetime.combine(arrival_time.date(), request.time_window_end)
 
+    # Проверяем, что окно попадает в смену бригады
+    if window_start < shift_start or window_end > shift_end:
+        return arrival_time, False, f"окно ({request.time_window_start.strftime('%H:%M')}-{request.time_window_end.strftime('%H:%M')}) вне смены бригады"
+
     if arrival_time < window_start:
         # Бригада приехала раньше — ждёт начала окна
-        return window_start, True
+        return window_start, True, "ожидание начала окна"
 
     if arrival_time > window_end:
-        # Бригада не успевает в окно — конфликт
-        return arrival_time, False
+        # Бригада не успевает в временное окно — конфликт
+        return arrival_time, False, f"прибытие {arrival_time.strftime('%H:%M')} > конец окна {window_end.strftime('%H:%M')}"
 
     # Внутри окна — начинаем сразу
-    return arrival_time, True
+    return arrival_time, True, "внутри окна"
 
 
 async def _load_pending_requests(plan_date: date, db: AsyncSession) -> list[ServiceRequest]:
@@ -220,16 +242,15 @@ async def _build_brigade_route(
 
         raw_arrival_time = current_time + timedelta(minutes=duration_min)
 
-        # Проверяем временное окно
-        actual_start, is_within_window = _check_time_window(raw_arrival_time, req)
+        # Проверяем временное окно и смену бригады
+        actual_start, is_feasible, reason = _check_time_window(raw_arrival_time, req, brigade)
 
-        if not is_within_window:
-            # Заявка не влезает в временное окно — пропускаем
+        if not is_feasible:
+            # Заявка не влезает в временное окно или вне смены — пропускаем
             skipped_for_brigade.append(req)
             logger.info(
-                "Бригада %d: заявка %d пропущена (прибытие %s > конец окна %s)",
-                brigade.id, req.id,
-                raw_arrival_time.strftime("%H:%M"), req.time_window_end.strftime("%H:%M"),
+                "Бригада %d: заявка %d пропущена — %s",
+                brigade.id, req.id, reason,
             )
             continue
 

@@ -162,13 +162,17 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
     elements.append(Paragraph(f"на {date_str}", subtitle_style))
     elements.append(Spacer(1, 5 * mm))
 
-    # Информация о бригаде
+    # Информация о бригаде - по центру страницы
     brigade_info = [
-        ["Бригада:", brigade_data.get("brigade_name", "")],
-        ["Специализация:", brigade_data.get("specialization", "")],
-        ["Автомобиль:", f"{brigade_data.get('vehicle_type', '')} {brigade_data.get('vehicle_plate', '')}"],
+        [Paragraph("<b>Бригада:</b>", ParagraphStyle("Label", fontName=font_name, fontSize=FONT_SIZE)), Paragraph(brigade_data.get("brigade_name", ""), ParagraphStyle("Value", fontName=font_name, fontSize=FONT_SIZE))],
+        [Paragraph("<b>Специализация:</b>", ParagraphStyle("Label2", fontName=font_name, fontSize=FONT_SIZE)), Paragraph(brigade_data.get("specialization", ""), ParagraphStyle("Value2", fontName=font_name, fontSize=FONT_SIZE))],
+        [Paragraph("<b>Автомобиль:</b>", ParagraphStyle("Label3", fontName=font_name, fontSize=FONT_SIZE)), Paragraph(f"{brigade_data.get('vehicle_type', '')} {brigade_data.get('vehicle_plate', '')}", ParagraphStyle("Value3", fontName=font_name, fontSize=FONT_SIZE))],
     ]
-    elements.append(_header_table(brigade_info, col_widths=[100 * mm, 70 * mm]))
+    brigade_info_table = _header_table(brigade_info, col_widths=[45 * mm, 125 * mm])
+    brigade_info_table.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+    ]))
+    elements.append(brigade_info_table)
     elements.append(Spacer(1, 5 * mm))
 
     # Состав бригады
@@ -177,13 +181,14 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
         members_header = [
             [Paragraph("<b>Состав бригады</b>", ParagraphStyle("Bold", fontName=font_name, fontSize=FONT_SIZE))]
         ]
-        members_table = Table(members_header, colWidths=[10 * cm])
+        members_table = Table(members_header, colWidths=[170 * mm])
         members_table.setStyle(
             TableStyle(
                 [
                     ("FONTNAME", (0, 0), (-1, -1), font_name),
                     ("TOPPADDING", (0, 0), (-1, -1), 4),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ]
             )
         )
@@ -193,7 +198,7 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
         for m in members:
             members_data.append([m.get("full_name", ""), m.get("role", "")])
 
-        members_tbl = _styled_table(members_data, col_widths=[100 * mm, 70 * mm])
+        members_tbl = _styled_table(members_data, col_widths=[110 * mm, 50 * mm])
         # Стиль заголовка
         style_additions = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
@@ -217,6 +222,7 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
                     ("FONTNAME", (0, 0), (-1, -1), font_name),
                     ("TOPPADDING", (0, 0), (-1, -1), 4),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ]
             )
         )
@@ -272,14 +278,11 @@ def generate_route_sheet_pdf(brigade_data: dict) -> bytes:
                 ]
             )
 
-        col_widths = [9 * mm, 13 * mm, 16 * mm, 40 * mm, 27 * mm, 19 * mm, 20 * mm, 16 * mm]
+        col_widths = [9 * mm, 13 * mm, 16 * mm, 40 * mm, 27 * mm, 19 * mm, 20 * mm, 17 * mm]
         route_tbl = _styled_table(route_data, col_widths=col_widths)
         hdr_style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-            ("ALIGN", (0, 0), (0, -1), "CENTER"),
-            ("ALIGN", (7, 0), (7, -1), "CENTER"),
-            ("ALIGN", (1, 0), (1, -1), "CENTER"),
-            ("ALIGN", (2, 0), (2, -1), "CENTER"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ]
         route_tbl.setStyle(TableStyle(hdr_style))
         elements.append(route_tbl)

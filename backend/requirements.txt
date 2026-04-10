@@ -2,10 +2,9 @@
 fastapi>=0.109
 uvicorn[standard]>=0.27
 
-# База данных и миграции
+# База данных
 sqlalchemy>=2.0
 aiosqlite>=0.19
-alembic>=1.13
 
 # Валидация и схемы
 pydantic>=2.0

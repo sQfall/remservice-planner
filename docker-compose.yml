@@ -12,7 +12,14 @@ services:
     container_name: remservice-backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - .env
+    environment:
+      - REMSERVICE_APP_NAME
+      - REMSERVICE_DATABASE_URL
+      - REMSERVICE_DEBUG
+      - REMSERVICE_OSRM_BASE_URL
+      - REMSERVICE_OSRM_TIMEOUT
+      - REMSERVICE_OSRM_ENABLED
     volumes:
       - sqlite-data:/app
     networks:

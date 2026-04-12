@@ -30,6 +30,11 @@ FROM python:${PYTHON_VERSION} AS production
 LABEL maintainer="remservice-planner"
 LABEL org.opencontainers.image.source="https://github.com/sqfall/remservice-planner"
 
+# Системные шрифты для кириллицы в PDF
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-dejavu \
+    && rm -rf /var/lib/apt/lists/*
+
 # Создание непривилегированного пользователя
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
 

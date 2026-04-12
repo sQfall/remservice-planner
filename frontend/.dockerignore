@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Output
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+nginx.conf
+
+# Testing
+coverage/
+.nyc_output/
+
+# Cache
+.cache/
+.temp/

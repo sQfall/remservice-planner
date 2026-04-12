@@ -45,7 +45,7 @@
 ### 1. Клонирование
 
 ```bash
-git clone https://github.com/your-username/remservice-planner.git
+git clone https://github.com/sqfall/remservice-planner.git
 cd remservice-planner
 ```
 
@@ -218,6 +218,70 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | POST | `/api/route-sheets/{date}/issue` | Выдать листы (статус → active) |
 
 ## Деплой
+
+### Docker (рекомендуемый способ)
+
+Проект полностью контейнеризован и готов к запуску через Docker Compose.
+
+#### Быстрый запуск
+
+```bash
+# Клонирование репозитория
+git clone https://github.com/sqfall/remservice-planner.git
+cd remservice-planner
+
+# Копирование конфигурации
+cp .env.example .env
+cp backend/.env.example backend/.env
+
+# Запуск всех сервисов
+docker compose up -d --build
+```
+
+Приложение будет доступно на **http://localhost** (порт 80 по умолчанию).
+
+API документация: **http://localhost/api/docs**
+
+#### Остановка
+
+```bash
+docker compose down
+```
+
+Для удаления данных БД:
+```bash
+docker compose down -v
+```
+
+#### Настройка порта
+
+Измените `HTTP_PORT` в файле `.env`:
+```
+HTTP_PORT=8080
+```
+
+#### Просмотр логов
+
+```bash
+# Все логи
+docker compose logs -f
+
+# Только backend
+docker compose logs -f backend
+
+# Только frontend
+docker compose logs -f frontend
+```
+
+#### Architecture
+
+Проект использует multi-stage builds для минимизации размера образов:
+
+- **Backend**: Python 3.11 Alpine → Slim образ с непривилегированным пользователем
+- **Frontend**: Node.js 18 (сборка) → Nginx 1.25 (production)
+- **База данных**: Named volume для персистентности SQLite
+- **Сеть**: изолированная bridge network для межсервисного взаимодействия
+- **Безопасность**: non-root пользователь, health checks, resource limits
 
 ### Render.com (Backend)
 1. Подключите GitHub репозиторий к Render

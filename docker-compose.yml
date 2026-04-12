@@ -13,6 +13,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
+    volumes:
+      - sqlite-data:/app
     networks:
       - remservice-network
     healthcheck:
@@ -76,6 +78,6 @@ networks:
 # Volumes
 # ──────────────────────────────────────────
 volumes:
-  backend-data:
-    name: remservice-data
+  sqlite-data:
+    name: remservice-sqlite-data
     driver: local

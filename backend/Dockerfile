@@ -44,13 +44,10 @@ COPY --from=builder --chown=appuser:appuser /install/bin /usr/local/bin
 # Копирование приложения
 COPY --chown=appuser:appuser . .
 
-# Создание директории для БД с правильными правами
-RUN mkdir -p /app/data && chown appuser:appuser /app/data
-
 # Переменные окружения
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    REMSERVICE_DATABASE_URL=sqlite+aiosqlite:///./data/data.db \
+    REMSERVICE_DATABASE_URL=sqlite+aiosqlite:///./data.db \
     REMSERVICE_DEBUG=false
 
 # Health check

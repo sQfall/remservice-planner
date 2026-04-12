@@ -23,6 +23,13 @@ env/
 # База данных (SQLite)
 *.db
 
+# Environment
+.env
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
 # Логи
 *.log
 

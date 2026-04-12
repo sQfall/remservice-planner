@@ -1,33 +1,31 @@
 # syntax=docker/dockerfile:1
 
 # Build arguments
-ARG PYTHON_VERSION=3.11
-ARG ALPINE_VERSION=3.19
+ARG PYTHON_VERSION=3.11-slim
 
 # ──────────────────────────────────────────────
 # Stage 1: Build — установка зависимостей
 # ──────────────────────────────────────────────
-FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS builder
+FROM python:${PYTHON_VERSION} AS builder
 
 WORKDIR /app
 
 # Установка системных зависимостей для сборки
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    musl-dev \
     libffi-dev \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Копирование файла зависимостей первым слоем для кэширования
 COPY requirements.txt .
 
-# Установка Python-зависимостей в отдельную директорию
-RUN pip install --no-compile --prefix=/install -r requirements.txt
+# Установка Python-зависимостей
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ──────────────────────────────────────────────
 # Stage 2: Production — минимальный образ
 # ──────────────────────────────────────────────
-FROM python:${PYTHON_VERSION}-slim AS production
+FROM python:${PYTHON_VERSION} AS production
 
 LABEL maintainer="remservice-planner"
 LABEL org.opencontainers.image.source="https://github.com/sqfall/remservice-planner"
@@ -38,11 +36,14 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuse
 WORKDIR /app
 
 # Копирование Python-зависимостей из builder
-COPY --from=builder --chown=appuser:appuser /install/lib/python*/site-packages /usr/local/lib/python*/site-packages
-COPY --from=builder --chown=appuser:appuser /install/bin /usr/local/bin
+COPY --from=builder --chown=appuser:appuser /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder --chown=appuser:appuser /usr/local/bin /usr/local/bin
 
 # Копирование приложения
 COPY --chown=appuser:appuser . .
+
+# Создание пустого файла БД и выдача прав на директорию
+RUN touch /app/data.db && chown -R appuser:appuser /app
 
 # Переменные окружения
 ENV PYTHONUNBUFFERED=1 \

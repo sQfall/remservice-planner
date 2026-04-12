@@ -13,8 +13,6 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
-    volumes:
-      - backend-data:/app/data.db
     networks:
       - remservice-network
     healthcheck:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import enum
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -30,7 +30,7 @@ class DailyPlan(Base):
     plan_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     status: Mapped[PlanStatus] = mapped_column(Enum(PlanStatus), nullable=False, default=PlanStatus.draft)
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     route_points: Mapped[list["RoutePoint"]] = relationship(back_populates="plan", cascade="all, delete-orphan")
 

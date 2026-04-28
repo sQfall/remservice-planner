@@ -1,6 +1,6 @@
 from __future__ import annotations
 import enum
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import TYPE_CHECKING
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, Enum, Time, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -42,7 +42,7 @@ class ServiceRequest(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     priority: Mapped[Priority] = mapped_column(Enum(Priority), nullable=False, default=Priority.medium)
     status: Mapped[RequestStatus] = mapped_column(Enum(RequestStatus), nullable=False, default=RequestStatus.new)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     planned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     contact_person: Mapped[str | None] = mapped_column(String(200), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)

@@ -273,35 +273,6 @@ docker compose logs -f backend
 docker compose logs -f frontend
 ```
 
-#### Architecture
-
-Проект использует multi-stage builds для минимизации размера образов:
-
-- **Backend**: Python 3.11 Alpine → Slim образ с непривилегированным пользователем
-- **Frontend**: Node.js 18 (сборка) → Nginx 1.25 (production)
-- **База данных**: Named volume для персистентности SQLite
-- **Сеть**: изолированная bridge network для межсервисного взаимодействия
-- **Безопасность**: non-root пользователь, health checks, resource limits
-
-### Render.com (Backend)
-1. Подключите GitHub репозиторий к Render
-2. Создайте **Web Service** с указанием директории `backend`
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-5. Для SQLite используйте внешнее хранилище или подключите PostgreSQL
-
-### Vercel (Frontend)
-1. Подключите репозиторий к Vercel
-2. Укажите корень проекта как `frontend`
-3. В `vite.config.js` измените `proxy.target` на URL вашего backend
-4. Deploy — Vercel автоматически соберёт и опубликует приложение
-
-### Railway.app (Всё в одном)
-1. Создайте проект в Railway
-2. Добавьте сервис для backend (Python)
-3. Добавьте сервис для frontend (Node.js)
-4. Railway автоматически настроит PostgreSQL и обновит `DATABASE_URL`
-
 ## Лицензия
 
 MIT
